@@ -161,7 +161,7 @@ async def test_first_drop_warned_once_per_connection(caplog):
         await ws.recv()
         await ws.send("not json")
         await ws.send("not json again")
-        await ws.send(json.dumps({"error": "SECRET-BODY"}))
+        await ws.send(json.dumps({"error": "boom"}))
         await ws.send(json.dumps({"MessageType": "Weird" * 20, "Message": {"x": "SECRET-BODY"}}))
         if connections == 1:
             await ws.send(json.dumps(POSITION_REPORT))
@@ -218,3 +218,35 @@ async def test_connect_timeout_is_explicit_and_logged_as_reconnect_warning(monke
     assert seen["open_timeout"] == 15
     warns = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
     assert any("TimeoutError" in w and "reconnecting" in w for w in warns)
+
+
+async def _error_frame_logs(caplog, error_value):
+    import logging
+    caplog.set_level(logging.INFO, logger="collector")
+
+    async def handler(ws):
+        await ws.recv()
+        await ws.send(json.dumps({"error": error_value}))
+        await ws.send(json.dumps({"error": "second"}))
+        await ws.send(json.dumps(POSITION_REPORT))
+        await asyncio.sleep(5)
+
+    async with serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        provider = AISStreamProvider(api_key="fake-test-key", url=f"ws://127.0.0.1:{port}", initial_delay=0.01)
+        await _collect(provider, 1)
+    return [r for r in caplog.records if r.levelname == "ERROR"]
+
+
+async def test_error_frame_text_logged_truncated_and_once(caplog):
+    recs = await _error_frame_logs(caplog, "Api Key" + chr(10) + "is not valid " + "x" * 300)
+    assert len(recs) == 1                                  # second error frame is sampled away
+    msg = recs[0].getMessage()
+    assert msg.startswith("AISstream error frame: Api Key is not valid xxx")
+    assert chr(10) not in msg and len(msg) == len("AISstream error frame: ") + 160
+
+
+async def test_error_frame_containing_key_is_redacted(caplog):
+    recs = await _error_frame_logs(caplog, "bad key fake-test-key rejected")
+    assert [r.getMessage() for r in recs] == ["AISstream error frame: bad key [redacted] rejected"]
+    assert all("fake-test-key" not in r.getMessage() for r in caplog.records)

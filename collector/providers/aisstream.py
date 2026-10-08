@@ -42,7 +42,14 @@ class AISStreamProvider:
             "FilterMessageTypes": ["PositionReport", "ShipStaticData"],
         }
 
-    def _drop(self, reason: str) -> None:
+    def _error_text(self, value) -> str:
+        text = "".join(" " if (c.isspace() or ord(c) < 32 or ord(c) == 127) else c for c in str(value))
+        text = text.replace(self._key, "[redacted]")
+        text = text[:160]
+        # a key cut by truncation must not leave a recognisable prefix behind
+        return text.replace(self._key[:8], "[redacted]") if len(self._key) >= 8 else text
+
+    def _drop(self, reason: str, error_value=None) -> None:
         """Count a dropped frame; warn on the first drop per connection, then at most once per interval.
 
         Reasons are short fixed strings (or a truncated message-type name), never message bodies.
@@ -50,7 +57,10 @@ class AISStreamProvider:
         self.dropped += 1
         now = time.monotonic()
         if not self._drop_warned or now - self._last_drop_log >= DROP_LOG_INTERVAL:
-            log.warning("dropped message (total dropped=%d): %s", self.dropped, reason)
+            if error_value is not None:
+                log.error("AISstream error frame: %s", self._error_text(error_value))
+            else:
+                log.warning("dropped message (total dropped=%d): %s", self.dropped, reason)
             self._drop_warned = True
             self._last_drop_log = now
 
@@ -76,7 +86,7 @@ class AISStreamProvider:
                             self._drop("not JSON")
                             continue
                         if isinstance(data, dict) and "error" in data:
-                            self._drop("AISstream error frame")
+                            self._drop("AISstream error frame", data["error"])
                             continue
                         msg = parse_message(data) if isinstance(data, dict) else None
                         if msg is None:
