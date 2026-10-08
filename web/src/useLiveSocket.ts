@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { INITIAL_RETRY_MS, nextRetryDelay, parseFrame, wsUrl } from "./liveLogic";
+import { INITIAL_RETRY_MS, parseFrame, retryAfterClose, wsUrl } from "./liveLogic";
 import type { LiveState } from "./types";
 
 type Opts = { enabled: boolean; payload: object | null; onFeatures: (f: GeoJSON.Feature[]) => void };
@@ -23,24 +23,29 @@ export function useLiveSocket({ enabled, payload, onFeatures }: Opts): LiveSocke
       setState("connecting");
       const ws = new WebSocket(wsUrl(location));
       wsRef.current = ws;
+      let openedAt: number | null = null;
+      let gotPositions = false;
       ws.onopen = () => {
-        retry = INITIAL_RETRY_MS;
+        openedAt = Date.now();
+        setErrorDetail(null);
         setState("live");
         if (payloadRef.current) ws.send(JSON.stringify(payloadRef.current));
       };
       ws.onmessage = (ev) => {
+        if (closed) return;
         if (typeof ev.data !== "string") return;
         const f = parseFrame(ev.data);
         if (!f) return;
-        if (f.type === "positions") { setErrorDetail(null); cbRef.current(f.features); }
+        if (f.type === "positions") { gotPositions = true; setErrorDetail(null); cbRef.current(f.features); }
         else setErrorDetail(f.detail);
       };
       ws.onclose = () => {
         if (wsRef.current === ws) wsRef.current = null;
         if (closed) return;
         setState("connecting");
-        timer = window.setTimeout(open, retry);
-        retry = nextRetryDelay(retry);
+        const r = retryAfterClose(retry, openedAt === null ? 0 : Date.now() - openedAt, gotPositions);
+        timer = window.setTimeout(open, r.waitMs);
+        retry = r.nextDelay;
       };
     };
     open();

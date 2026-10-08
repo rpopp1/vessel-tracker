@@ -64,3 +64,16 @@ export function chipModel(
   const tone = feedError || stale ? "warn" : live === "live" ? "ok" : "idle";
   return { label, tone, ageText };
 }
+
+export const HEALTHY_OPEN_MS = 5000;
+
+export function retryAfterClose(
+  prevDelay: number,
+  openedForMs: number,
+  gotPositions: boolean,
+): { waitMs: number; nextDelay: number } {
+  if (gotPositions || openedForMs >= HEALTHY_OPEN_MS) {
+    return { waitMs: INITIAL_RETRY_MS, nextDelay: INITIAL_RETRY_MS };
+  }
+  return { waitMs: prevDelay, nextDelay: nextRetryDelay(prevDelay) };
+}

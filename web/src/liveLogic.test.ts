@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chipModel, mergeFeatures, nextRetryDelay, parseFrame, wsUrl } from "./liveLogic";
+import { chipModel, mergeFeatures, nextRetryDelay, parseFrame, retryAfterClose, wsUrl } from "./liveLogic";
 
 const feat = (mmsi: unknown, extra: object = {}): GeoJSON.Feature => ({
   type: "Feature", geometry: { type: "Point", coordinates: [0, 0] }, properties: { mmsi, ...extra },
@@ -79,5 +79,46 @@ describe("chipModel", () => {
     expect(m.tone).toBe("warn");
     expect(m.label).toBe("Live - temporarily unavailable");
     expect(chipModel("live", ago(10), now, "invalid subscription").tone).toBe("ok");
+  });
+});
+
+describe("retryAfterClose", () => {
+  it("healthy by frame resets to 1000", () => {
+    expect(retryAfterClose(8000, 100, true)).toEqual({ waitMs: 1000, nextDelay: 1000 });
+  });
+  it("healthy by duration resets", () => {
+    expect(retryAfterClose(8000, 5000, false)).toEqual({ waitMs: 1000, nextDelay: 1000 });
+  });
+  it("4999 ms is unhealthy", () => {
+    expect(retryAfterClose(1000, 4999, false)).toEqual({ waitMs: 1000, nextDelay: 2000 });
+  });
+  it("unhealthy closes escalate and cap", () => {
+    let d = 1000;
+    const waits: number[] = [];
+    for (let i = 0; i < 8; i++) {
+      const r = retryAfterClose(d, 0, false);
+      waits.push(r.waitMs);
+      d = r.nextDelay;
+    }
+    expect(waits).toEqual([1000, 2000, 4000, 8000, 16000, 30000, 30000, 30000]);
+  });
+});
+
+describe("chipModel boundaries", () => {
+  const now = Date.parse("2026-01-01T12:00:00Z");
+  const ago = (s: number) => new Date(now - s * 1000).toISOString();
+  it("90 s switches to minutes, 89 s stays seconds", () => {
+    expect(chipModel("live", ago(89), now).ageText).toBe("89s ago");
+    expect(chipModel("live", ago(90), now).ageText).toBe("2 min ago");
+  });
+  it("300 s not stale, 301 s stale", () => {
+    expect(chipModel("live", ago(300), now).tone).toBe("ok");
+    expect(chipModel("live", ago(301), now).tone).toBe("warn");
+  });
+  it("invalid date gives no data yet", () => {
+    expect(chipModel("live", "garbage", now).ageText).toBe("no data yet");
+  });
+  it("future timestamp clamps to 0s ago", () => {
+    expect(chipModel("live", ago(-60), now).ageText).toBe("0s ago");
   });
 });
