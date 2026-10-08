@@ -26,3 +26,6 @@ pgdata/
 Thumbs.db
 .idea/
 .vscode/
+
+# SDD scratch workspace
+.superpowers/
