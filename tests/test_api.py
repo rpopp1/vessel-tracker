@@ -222,6 +222,20 @@ def test_ws_bad_json_is_an_error_frame_not_a_dead_connection(client, db):
             assert receive(ws)["type"] == "positions"
 
 
+def test_ws_binary_frame_is_an_error_frame_and_keeps_subscription(client, db):
+    seed_vessel(db, 1, lon=10, lat=10)
+    seed_vessel(db, 2, lon=80, lat=10)
+    with client.websocket_connect("/ws/positions") as ws:
+        ws.send_json({"bbox": [0, 0, 20, 20]})
+        ws.send_bytes(b"binary-frame")
+        assert receive(ws) == {"type": "error", "detail": "invalid subscription"}
+        with Feeder(["UPDATE latest_position SET updated_at = now() WHERE mmsi = 2",
+                     "UPDATE latest_position SET updated_at = now() WHERE mmsi = 1"]):
+            msg = receive(ws)
+    assert msg["type"] == "positions"
+    assert [f["properties"]["mmsi"] for f in msg["features"]] == [1]  # previous bbox kept, reader alive
+
+
 def test_ws_initial_fetch_failure_sends_error_and_closes_1011(client, monkeypatch):
     def now(*a):
         raise psycopg.OperationalError("down")

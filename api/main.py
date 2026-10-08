@@ -162,7 +162,8 @@ def create_app(conninfo: str | None = None, cfg: Config | None = None, poll_seco
                         data = await ws.receive_json()
                     except (WebSocketDisconnect, RuntimeError):
                         return
-                    except ValueError:
+                    except Exception as exc:  # bad JSON (ValueError), binary frame (KeyError), ...; never BaseException
+                        log.warning("websocket frame rejected: %s", type(exc).__name__)
                         await send({"type": "error", "detail": "invalid subscription"})
                         continue
                     try:

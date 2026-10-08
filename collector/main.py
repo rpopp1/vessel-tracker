@@ -44,13 +44,18 @@ async def reconnect_db(store: Store) -> None:
 
 
 async def handle_with_recovery(pipeline, store, msg, reconnect, counters: dict[str, int]) -> None:
-    """Handle one message. A database error triggers reconnect and ONE retry of the same message;
-    a second failure, or any non-database exception, is logged and counted, never fatal."""
+    """Handle one message. A connection-level database error (OperationalError/InterfaceError) triggers
+    reconnect and ONE retry of the same message; a second failure, any other psycopg.Error (DataError,
+    IntegrityError, ...: a retry cannot succeed) or any other exception is logged and counted, never fatal."""
     try:
         pipeline.handle(msg)
         return
-    except psycopg.Error as exc:
+    except (psycopg.OperationalError, psycopg.InterfaceError) as exc:
         log.exception("database error handling message (%s); reconnecting", type(exc).__name__)
+    except psycopg.Error as exc:
+        log.error("database rejected message (%s); skipping it", type(exc).__name__)
+        counters["handler_errors"] += 1
+        return
     except Exception as exc:
         log.exception("error handling message (%s): %s", type(exc).__name__, exc)
         counters["handler_errors"] += 1
@@ -72,6 +77,25 @@ def safe_ensure_partitions(store: Store) -> bool:
         return False
 
 
+PARTITION_STARTUP_ATTEMPTS = 3
+
+
+async def ensure_partitions_with_retry(store: Store, attempts: int = PARTITION_STARTUP_ATTEMPTS) -> bool:
+    """Startup partition check with 1/2/4 s backoff. Never raises: on exhaustion logs an ERROR and returns False
+    (the hourly check keeps trying)."""
+    delay = 1.0
+    for attempt in range(1, attempts + 1):
+        try:
+            ensure_month_partitions(store.conn)
+            return True
+        except Exception as exc:
+            log.warning("partition creation failed at startup (%s), attempt %d/%d", type(exc).__name__, attempt, attempts)
+            await _sleep(delay)
+            delay *= 2
+    log.error("partition creation still failing after %d attempts; continuing without it (hourly check will retry)", attempts)
+    return False
+
+
 async def heartbeat(pipeline, provider, counters: dict[str, int], interval: float = HEARTBEAT_INTERVAL) -> None:
     """Periodic status line, independent of message traffic."""
     while True:
@@ -90,7 +114,7 @@ async def run() -> None:
     log.info("collector starting; config loaded")
     store = Store(None)  # type: ignore[arg-type]
     await reconnect_db(store)  # retries with backoff if the database is unreachable
-    safe_ensure_partitions(store)
+    await ensure_partitions_with_retry(store)
     tankers = store.load_tanker_states()
     log.info("database connected, partitions ensured, known_tankers=%d loaded", len(tankers))
     pipeline = Pipeline(store, cfg, tankers)

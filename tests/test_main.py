@@ -148,3 +148,51 @@ async def test_heartbeat_fires_with_zero_traffic(caplog):
         await task
     lines = [r.getMessage() for r in caplog.records if "heartbeat" in r.getMessage()]
     assert lines and "received=0" in lines[0] and "never" in lines[0] and "known_tankers=0" in lines[0]
+
+
+@pytest.mark.parametrize("exc", [psycopg.errors.DataError("nul"), psycopg.errors.IntegrityError("x"),
+                                 psycopg.ProgrammingError("p")])
+async def test_non_connection_psycopg_errors_do_not_reconnect_or_retry(exc, caplog):
+    store, p, rec, counters = setup([exc])
+    caplog.set_level(logging.INFO, logger="collector")
+    await cm.handle_with_recovery(p, store, "m", rec, counters)
+    assert rec.calls == [] and store.calls == 1 and counters["handler_errors"] == 1
+    assert type(exc).__name__ in caplog.text
+    await cm.handle_with_recovery(p, store, "m2", rec, counters)  # loop continues
+    assert store.stored == ["m2"]
+
+
+async def test_startup_partition_retry_succeeds_after_failures(monkeypatch, caplog):
+    sleeps, calls = [], []
+
+    async def fake_sleep(d):
+        sleeps.append(d)
+
+    def flaky(conn):
+        calls.append(1)
+        if len(calls) < 3:
+            raise psycopg.OperationalError("down")
+
+    monkeypatch.setattr(cm, "_sleep", fake_sleep)
+    monkeypatch.setattr(cm, "ensure_month_partitions", flaky)
+    caplog.set_level(logging.INFO, logger="collector")
+    assert await cm.ensure_partitions_with_retry(FakeStore([])) is True
+    assert len(calls) == 3 and sleeps == [1.0, 2.0]
+    assert sum("partition" in r.getMessage().lower() for r in caplog.records) >= 2
+
+
+async def test_startup_partition_retry_gives_up_gracefully(monkeypatch, caplog):
+    sleeps = []
+
+    async def fake_sleep(d):
+        sleeps.append(d)
+
+    def boom(conn):
+        raise psycopg.OperationalError("down")
+
+    monkeypatch.setattr(cm, "_sleep", fake_sleep)
+    monkeypatch.setattr(cm, "ensure_month_partitions", boom)
+    caplog.set_level(logging.INFO, logger="collector")
+    assert await cm.ensure_partitions_with_retry(FakeStore([])) is False  # no exception
+    assert sleeps == [1.0, 2.0, 4.0]
+    assert any(r.levelno == logging.ERROR for r in caplog.records)
