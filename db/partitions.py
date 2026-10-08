@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, datetime, timezone
 
 import psycopg
 
@@ -28,17 +28,23 @@ def ensure_month_partitions(conn: psycopg.Connection, months_ahead: int = 2, tod
     partition whose range already has rows in the DEFAULT partition.
     """
     _require_autocommit(conn)
-    today = today or date.today()
-    names = []
+    today = today or datetime.now(timezone.utc).date()
+    names, failed = [], []
     for i in range(months_ahead + 1):
         start = add_months(today, i)
         end = add_months(start, 1)
         name = _name(start)  # built from dates only, never from user input
-        conn.execute(
-            f"CREATE TABLE IF NOT EXISTS {name} PARTITION OF positions "
-            f"FOR VALUES FROM ('{start} 00:00+00') TO ('{end} 00:00+00')"
-        )
+        try:
+            conn.execute(
+                f"CREATE TABLE IF NOT EXISTS {name} PARTITION OF positions "
+                f"FOR VALUES FROM ('{start} 00:00+00') TO ('{end} 00:00+00')"
+            )
+        except Exception as exc:  # keep going: later months must still be attempted
+            failed.append(f"{name} ({type(exc).__name__})")
+            continue
         names.append(name)
+    if failed:
+        raise RuntimeError("could not create partitions: " + ", ".join(failed))
     return names
 
 
