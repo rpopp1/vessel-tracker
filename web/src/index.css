@@ -2,7 +2,6 @@ html, body, #root { height: 100%; margin: 0; }
 body { background: #0b1220; color: #e5e7eb; font-family: system-ui, sans-serif; font-size: 13px; }
 .app { position: relative; height: 100%; }
 .map { position: absolute; inset: 0; }
-.debug { position: absolute; top: 8px; right: 8px; background: #111827; padding: 6px 10px; border-radius: 6px; }
 
 .panel { box-sizing: border-box; position: absolute; z-index: 2; background: rgba(17, 24, 39, 0.92); border: 1px solid #1f2937; border-radius: 8px; padding: 10px; overflow-y: auto; max-height: calc(100% - 16px); }
 .panel.left { top: 8px; left: 8px; width: 250px; }
@@ -18,3 +17,19 @@ body { background: #0b1220; color: #e5e7eb; font-family: system-ui, sans-serif; 
 .row.active .count { color: #fff; }
 .swatch { width: 10px; height: 10px; border-radius: 2px; }
 .clear { background: #374151; border: 0; color: inherit; border-radius: 4px; padding: 4px 8px; cursor: pointer; margin-bottom: 4px; }
+.panel.right { top: 8px; right: 8px; width: 290px; }
+.close { position: absolute; top: 6px; right: 8px; background: none; border: 0; color: #9ca3af; cursor: pointer; font-size: 16px; }
+dl { display: grid; grid-template-columns: 110px 1fr; gap: 4px 8px; margin: 8px 0; }
+dt { color: #9ca3af; } dt em { color: #f59e0b; font-style: normal; font-size: 10px; display: block; }
+dd { margin: 0; word-break: break-word; }
+.tracks { display: flex; gap: 6px; align-items: center; }
+.tracks button { background: #374151; color: inherit; border: 0; border-radius: 4px; padding: 3px 8px; cursor: pointer; }
+.tracks button.on { background: #1d4ed8; }
+.muted { color: #9ca3af; }
+.search { position: absolute; z-index: 3; top: 8px; left: 50%; transform: translateX(-50%); width: 320px; }
+.search input { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px; border: 1px solid #374151; background: #111827; color: inherit; font: inherit; }
+.search ul { list-style: none; margin: 4px 0 0; padding: 0; background: #111827; border: 1px solid #374151; border-radius: 8px; max-height: 300px; overflow-y: auto; }
+.search li button { display: block; width: 100%; text-align: left; background: none; border: 0; color: inherit; padding: 6px 10px; cursor: pointer; font: inherit; }
+.search li button:hover { background: #1f2937; }
+.search li small { color: #9ca3af; display: block; }
+.search .none { padding: 8px 10px; color: #9ca3af; }
