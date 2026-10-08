@@ -12,6 +12,11 @@ def add_months(d: date, n: int) -> date:
     return date(idx // 12, idx % 12 + 1, 1)
 
 
+def _require_autocommit(conn: psycopg.Connection) -> None:
+    if not conn.autocommit:
+        raise RuntimeError("partition DDL requires an autocommit connection (use common.database.connect)")
+
+
 def _name(start: date) -> str:
     return f"positions_{start:%Y_%m}"
 
@@ -22,6 +27,7 @@ def ensure_month_partitions(conn: psycopg.Connection, months_ahead: int = 2, tod
     Must run before rows for that month are inserted: Postgres refuses to create a
     partition whose range already has rows in the DEFAULT partition.
     """
+    _require_autocommit(conn)
     today = today or date.today()
     names = []
     for i in range(months_ahead + 1):
@@ -37,6 +43,7 @@ def ensure_month_partitions(conn: psycopg.Connection, months_ahead: int = 2, tod
 
 
 def prune_old_partitions(conn: psycopg.Connection, keep_months: int, today: date | None = None) -> list[str]:
+    _require_autocommit(conn)
     today = today or date.today()
     cutoff = add_months(today, -keep_months)
     rows = conn.execute(
