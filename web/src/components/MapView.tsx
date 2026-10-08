@@ -1,5 +1,8 @@
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+// MapLibre 6 looks for its worker file next to its own module. Vite's dev server pre-bundles MapLibre
+// into a cache folder without that file ("Worker failed to load"), so point it at the real file.
+import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getJSON } from "../api";
 import { DEFAULT_COLOR, SIZE_COLORS } from "../colors";
@@ -20,6 +23,8 @@ type Props = {
   onLiveError?: (detail: string | null) => void;
   onFetchState?: (ok: boolean) => void;
 };
+
+maplibregl.setWorkerUrl(maplibreWorkerUrl);
 
 const STYLE = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };

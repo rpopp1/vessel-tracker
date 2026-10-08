@@ -106,7 +106,7 @@ Three terminals (PowerShell or cmd.exe; the commands are identical in both), eac
    npm run dev
    ```
 
-   Open the URL it prints. The dev server proxies `/api` and `/ws` to `127.0.0.1:8000`. If port 8000 is taken, run uvicorn on another port and change both proxy targets in `web/vite.config.ts`.
+   Open the URL it prints. The dev server proxies `/api` and `/ws` to `127.0.0.1:8000`. If port 8000 is taken, run uvicorn on another port (for example `--port 8011`) and tell the dev server about it before starting it: in PowerShell `$env:API_PORT = 8011` then `npm run dev` (cmd.exe: `set API_PORT=8011`).
 
 ### If something is wrong
 
@@ -129,7 +129,7 @@ npm run build
 
 DB tests need `TEST_DATABASE_URL` set and the test DB migrated (`python -m db.migrate --test`); otherwise they skip. `-rs` prints the skip reasons so you can notice them. The DB tests TRUNCATE their database, so they refuse to run (a hard failure, not a skip) if `TEST_DATABASE_URL` equals `DATABASE_URL` or if the connected database name does not contain "test".
 
-The automated tests do NOT cover the map's visual rendering or live websocket behavior. Those were never verified in a browser during the build. Check by hand the first time:
+The automated tests do NOT cover the map's visual rendering or live websocket behavior. The build was done without a browser. The first manual run (2026-10-08) confirmed that the map and basemap load, vessels show as clusters at low zoom, the filter panel shows faceted counts that change with the selected filters, and the status chip shows "Zoom in for live updates" with a recent age. Everything else below was NOT yet checked in a browser: individual markers, the Live chip, the detail panel, tracks, search, the banners and the 60 s refresh. Check by hand the first time:
 
 - The map loads.
 - At low zoom, vessels appear as clusters.
