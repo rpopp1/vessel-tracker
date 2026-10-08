@@ -1,0 +1,5 @@
+html, body, #root { height: 100%; margin: 0; }
+body { background: #0b1220; color: #e5e7eb; font-family: system-ui, sans-serif; font-size: 13px; }
+.app { position: relative; height: 100%; }
+.map { position: absolute; inset: 0; }
+.debug { position: absolute; top: 8px; right: 8px; background: #111827; padding: 6px 10px; border-radius: 6px; }
