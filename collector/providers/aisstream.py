@@ -40,7 +40,6 @@ class AISStreamProvider:
             try:
                 async with connect(self.url, ping_interval=20) as ws:
                     await ws.send(json.dumps(self._subscription()))
-                    delay = self.initial_delay
                     async for raw in ws:
                         try:
                             data = json.loads(raw)
@@ -55,6 +54,7 @@ class AISStreamProvider:
                         if msg is None:
                             self.dropped += 1
                             continue
+                        delay = self.initial_delay
                         yield msg
             except (WebSocketException, OSError) as exc:
                 log.warning("AISstream connection lost (%s); reconnecting", type(exc).__name__)
