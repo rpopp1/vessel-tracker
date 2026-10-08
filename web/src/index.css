@@ -26,7 +26,7 @@ dd { margin: 0; word-break: break-word; }
 .tracks button { background: #374151; color: inherit; border: 0; border-radius: 4px; padding: 3px 8px; cursor: pointer; }
 .tracks button.on { background: #1d4ed8; }
 .muted { color: #9ca3af; }
-.search { position: absolute; z-index: 3; top: 8px; left: 50%; transform: translateX(-50%); width: 320px; }
+.search { position: absolute; z-index: 4; top: 8px; left: 50%; transform: translateX(-50%); width: 320px; }
 .search input { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px; border: 1px solid #374151; background: #111827; color: inherit; font: inherit; }
 .search ul { list-style: none; margin: 4px 0 0; padding: 0; background: #111827; border: 1px solid #374151; border-radius: 8px; max-height: 300px; overflow-y: auto; }
 .search li button { display: block; width: 100%; text-align: left; background: none; border: 0; color: inherit; padding: 6px 10px; cursor: pointer; font: inherit; }
