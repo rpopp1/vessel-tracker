@@ -1,0 +1,14 @@
+# Size classes, largest first. A vessel gets the first class whose min_length_m <= its length.
+size_classes:
+  - {name: "ULCC/VLCC",   min_length_m: 300, cargo_group: crude,             laden_draught_m: 18.0}
+  - {name: "Suezmax",     min_length_m: 260, cargo_group: mostly_crude,      laden_draught_m: 15.5}
+  - {name: "Aframax/LR2", min_length_m: 225, cargo_group: crude_or_products, laden_draught_m: 13.0}
+  - {name: "Panamax/LR1", min_length_m: 200, cargo_group: mostly_products,   laden_draught_m: 12.0}
+  - {name: "MR",          min_length_m: 160, cargo_group: products,          laden_draught_m: 10.5}
+  - {name: "Handy/small", min_length_m: 0,   cargo_group: products_coastal,  laden_draught_m: 8.0}
+
+laden_ratio: 0.8            # laden if draught >= ratio * class laden draught
+observed_range_min_m: 3.0   # use the vessel's own min/max draught once the range is at least this wide
+fade_hours: 2               # UI fades markers older than this
+stale_hours: 6              # hidden from the live map after this
+retention_months: 3         # position partitions older than this can be pruned
