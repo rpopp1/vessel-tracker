@@ -11,6 +11,7 @@ venv/
 __pycache__/
 *.pyc
 .pytest_cache/
+*.egg-info/
 
 # Node
 node_modules/
@@ -26,3 +27,6 @@ pgdata/
 Thumbs.db
 .idea/
 .vscode/
+
+# SDD scratch workspace
+.superpowers/

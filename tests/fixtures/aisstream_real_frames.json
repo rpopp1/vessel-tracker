@@ -1,0 +1,358 @@
+{
+  "PositionReport": [
+    {
+      "MetaData": {
+        "MMSI": 244147505,
+        "MMSI_String": 244147505,
+        "ShipName": "TASMANZEE           ",
+        "latitude": 51.813,
+        "longitude": 4.88367,
+        "time_utc": "2026-10-08 21:21:13.01375178 +0000 UTC"
+      },
+      "MessageType": "PositionReport",
+      "Message": {
+        "PositionReport": {
+          "MessageID": 3,
+          "RepeatIndicator": 0,
+          "UserID": 244147505,
+          "Valid": true,
+          "NavigationalStatus": 5,
+          "RateOfTurn": -128,
+          "Sog": 0,
+          "PositionAccuracy": false,
+          "Longitude": 4.883666666666667,
+          "Latitude": 51.813,
+          "Cog": 325,
+          "TrueHeading": 511,
+          "Timestamp": 13,
+          "SpecialManoeuvreIndicator": 0,
+          "Spare": 0,
+          "Raim": false,
+          "CommunicationState": 86378
+        }
+      }
+    },
+    {
+      "MetaData": {
+        "MMSI": 232052197,
+        "MMSI_String": 232052197,
+        "ShipName": "MERIYA",
+        "latitude": 38.98299,
+        "longitude": 1.53998,
+        "time_utc": "2026-10-08 21:21:13.015481355 +0000 UTC"
+      },
+      "MessageType": "PositionReport",
+      "Message": {
+        "PositionReport": {
+          "MessageID": 3,
+          "RepeatIndicator": 0,
+          "UserID": 232052197,
+          "Valid": true,
+          "NavigationalStatus": 0,
+          "RateOfTurn": 0,
+          "Sog": 0,
+          "PositionAccuracy": false,
+          "Longitude": 1.5399816666666666,
+          "Latitude": 38.982985,
+          "Cog": 0,
+          "TrueHeading": 511,
+          "Timestamp": 60,
+          "SpecialManoeuvreIndicator": 0,
+          "Spare": 0,
+          "Raim": false,
+          "CommunicationState": 0
+        }
+      }
+    },
+    {
+      "MetaData": {
+        "MMSI": 316048574,
+        "MMSI_String": 316048574,
+        "ShipName": "SEASPAN TRANSPORTER",
+        "latitude": 49.10775,
+        "longitude": -123.12807,
+        "time_utc": "2026-10-08 21:21:13.020558442 +0000 UTC"
+      },
+      "MessageType": "PositionReport",
+      "Message": {
+        "PositionReport": {
+          "MessageID": 1,
+          "RepeatIndicator": 0,
+          "UserID": 316048574,
+          "Valid": true,
+          "NavigationalStatus": 0,
+          "RateOfTurn": 0,
+          "Sog": 9.3,
+          "PositionAccuracy": true,
+          "Longitude": -123.12806666666667,
+          "Latitude": 49.107751666666665,
+          "Cog": 78.8,
+          "TrueHeading": 79,
+          "Timestamp": 12,
+          "SpecialManoeuvreIndicator": 0,
+          "Spare": 0,
+          "Raim": false,
+          "CommunicationState": 0
+        }
+      }
+    }
+  ],
+  "tanker_static": [
+    {
+      "MetaData": {
+        "MMSI": 271045135,
+        "MMSI_String": 271045135,
+        "ShipName": "T.SADBERK           ",
+        "latitude": 1.24456,
+        "longitude": 103.90674,
+        "time_utc": "2026-10-08 21:21:13.066824423 +0000 UTC"
+      },
+      "MessageType": "ShipStaticData",
+      "Message": {
+        "ShipStaticData": {
+          "AisVersion": 2,
+          "CallSign": "TCA4604",
+          "Destination": "SGSIN               ",
+          "Dimension": {
+            "A": 228,
+            "B": 49,
+            "C": 17,
+            "D": 31
+          },
+          "Dte": false,
+          "Eta": {
+            "Day": 8,
+            "Hour": 8,
+            "Minute": 0,
+            "Month": 10
+          },
+          "FixType": 1,
+          "ImoNumber": 9804136,
+          "MaximumStaticDraught": 9.5,
+          "MessageID": 5,
+          "Name": "T.SADBERK           ",
+          "RepeatIndicator": 0,
+          "Spare": false,
+          "Type": 80,
+          "UserID": 271045135,
+          "Valid": true
+        }
+      }
+    },
+    {
+      "MetaData": {
+        "MMSI": 205393190,
+        "MMSI_String": 205393190,
+        "ShipName": "AMELIE 1",
+        "latitude": 51.88558,
+        "longitude": 4.44968,
+        "time_utc": "2026-10-08 21:21:13.697431844 +0000 UTC"
+      },
+      "MessageType": "ShipStaticData",
+      "Message": {
+        "ShipStaticData": {
+          "AisVersion": 1,
+          "CallSign": "OT3931",
+          "Destination": "CALANDKANAAL",
+          "Dimension": {
+            "A": 110,
+            "B": 0,
+            "C": 6,
+            "D": 6
+          },
+          "Dte": true,
+          "Eta": {
+            "Day": 27,
+            "Hour": 12,
+            "Minute": 32,
+            "Month": 3
+          },
+          "FixType": 15,
+          "ImoNumber": 0,
+          "MaximumStaticDraught": 3,
+          "MessageID": 5,
+          "Name": "AMELIE 1",
+          "RepeatIndicator": 0,
+          "Spare": false,
+          "Type": 80,
+          "UserID": 205393190,
+          "Valid": true
+        }
+      }
+    },
+    {
+      "MetaData": {
+        "MMSI": 244660047,
+        "MMSI_String": 244660047,
+        "ShipName": "SYNTHESE 4",
+        "latitude": 53.31229,
+        "longitude": 6.96321,
+        "time_utc": "2026-10-08 21:21:13.994792059 +0000 UTC"
+      },
+      "MessageType": "ShipStaticData",
+      "Message": {
+        "ShipStaticData": {
+          "AisVersion": 2,
+          "CallSign": "PD5964",
+          "Destination": "MARL",
+          "Dimension": {
+            "A": 97,
+            "B": 0,
+            "C": 0,
+            "D": 9
+          },
+          "Dte": false,
+          "Eta": {
+            "Day": 0,
+            "Hour": 0,
+            "Minute": 0,
+            "Month": 0
+          },
+          "FixType": 1,
+          "ImoNumber": 0,
+          "MaximumStaticDraught": 2.5,
+          "MessageID": 5,
+          "Name": "SYNTHESE 4",
+          "RepeatIndicator": 0,
+          "Spare": false,
+          "Type": 80,
+          "UserID": 244660047,
+          "Valid": true
+        }
+      }
+    },
+    {
+      "MetaData": {
+        "MMSI": 265062000,
+        "MMSI_String": 265062000,
+        "ShipName": "FURE VEN            ",
+        "latitude": 49.47062,
+        "longitude": 0.53677,
+        "time_utc": "2026-10-08 21:21:14.222309804 +0000 UTC"
+      },
+      "MessageType": "ShipStaticData",
+      "Message": {
+        "ShipStaticData": {
+          "AisVersion": 2,
+          "CallSign": "SBED   ",
+          "Destination": "FRPRJE              ",
+          "Dimension": {
+            "A": 119,
+            "B": 30,
+            "C": 15,
+            "D": 8
+          },
+          "Dte": false,
+          "Eta": {
+            "Day": 7,
+            "Hour": 18,
+            "Minute": 0,
+            "Month": 10
+          },
+          "FixType": 1,
+          "ImoNumber": 9983102,
+          "MaximumStaticDraught": 6,
+          "MessageID": 5,
+          "Name": "FURE VEN            ",
+          "RepeatIndicator": 0,
+          "Spare": false,
+          "Type": 81,
+          "UserID": 265062000,
+          "Valid": true
+        }
+      }
+    }
+  ],
+  "other_static": [
+    {
+      "MetaData": {
+        "MMSI": 319305600,
+        "MMSI_String": 319305600,
+        "ShipName": "PANGEA",
+        "latitude": 41.37585,
+        "longitude": 2.18646,
+        "time_utc": "2026-10-08 21:21:13.089432761 +0000 UTC"
+      },
+      "MessageType": "ShipStaticData",
+      "Message": {
+        "ShipStaticData": {
+          "AisVersion": 2,
+          "CallSign": "ZGPJ2",
+          "Destination": "BARCELONA",
+          "Dimension": {
+            "A": 48,
+            "B": 32,
+            "C": 7,
+            "D": 7
+          },
+          "Dte": false,
+          "Eta": {
+            "Day": 28,
+            "Hour": 8,
+            "Minute": 0,
+            "Month": 9
+          },
+          "FixType": 3,
+          "ImoNumber": 9923516,
+          "MaximumStaticDraught": 3.6,
+          "MessageID": 5,
+          "Name": "PANGEA",
+          "RepeatIndicator": 0,
+          "Spare": false,
+          "Type": 37,
+          "UserID": 319305600,
+          "Valid": true
+        }
+      }
+    },
+    {
+      "MetaData": {
+        "MMSI": 256114000,
+        "MMSI_String": 256114000,
+        "ShipName": "MOREA               ",
+        "latitude": 42.65455,
+        "longitude": 27.97726,
+        "time_utc": "2026-10-08 21:21:13.108681182 +0000 UTC"
+      },
+      "MessageType": "ShipStaticData",
+      "Message": {
+        "ShipStaticData": {
+          "AisVersion": 1,
+          "CallSign": "9HA3822",
+          "Destination": "CONSTANTZA          ",
+          "Dimension": {
+            "A": 168,
+            "B": 31,
+            "C": 12,
+            "D": 20
+          },
+          "Dte": false,
+          "Eta": {
+            "Day": 9,
+            "Hour": 7,
+            "Minute": 0,
+            "Month": 10
+          },
+          "FixType": 1,
+          "ImoNumber": 9699880,
+          "MaximumStaticDraught": 7.8,
+          "MessageID": 5,
+          "Name": "MOREA               ",
+          "RepeatIndicator": 0,
+          "Spare": false,
+          "Type": 70,
+          "UserID": 256114000,
+          "Valid": true
+        }
+      }
+    }
+  ],
+  "other": [
+    {
+      "Message": {
+        "CompressionEnabled": true
+      },
+      "MessageType": "SubscriptionConfirmation"
+    }
+  ]
+}
