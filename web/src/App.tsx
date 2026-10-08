@@ -23,7 +23,7 @@ export default function App() {
         setSelected(h.mmsi);
         if (h.lon !== null && h.lat !== null) setFlyTo({ lon: h.lon, lat: h.lat, nonce: Date.now() });
       }} />
-      {selected !== null && <VesselPanel mmsi={selected} onClose={() => setSelected(null)} onTrack={setTrack} />}
+      {selected !== null && <VesselPanel key={selected} mmsi={selected} onClose={() => setSelected(null)} onTrack={setTrack} />}
       <MapView filters={filters} meta={meta} onSelect={setSelected} track={track} flyTo={flyTo} />
     </div>
   );

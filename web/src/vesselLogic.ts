@@ -13,20 +13,20 @@ export function formatIso(iso: string): string {
 }
 
 export function detailRows(v: VesselDetail, fmt: (iso: string) => string = formatIso): DetailRow[] {
-  const p = v.position;
+  const p = v.position ?? null;
   return [
     { label: "Size class", value: dash(v.size_class) },
-    { label: "Cargo group", value: dash(v.cargo_group.replace(/_/g, " ")), tag: "inferred" },
+    { label: "Cargo group", value: dash(String(v.cargo_group ?? "").replace(/_/g, " ")), tag: "inferred" },
     { label: "Laden", value: v.laden === null || v.laden === undefined ? "-" : v.laden ? "Laden" : "Ballast", tag: "estimated" },
     { label: "Flag", value: dash(v.flag) },
-    { label: "MMSI / IMO", value: `${v.mmsi} / ${dash(v.imo)}` },
+    { label: "MMSI / IMO", value: `${dash(v.mmsi)} / ${dash(v.imo)}` },
     { label: "Dimensions", value: v.length_m ? `${v.length_m} x ${v.beam_m ?? "-"} m` : "-" },
     { label: "Draught", value: v.draught_m ? `${v.draught_m} m` : "-" },
     { label: "Destination", value: dash(v.destination) },
     { label: "ETA", value: v.eta ? fmt(v.eta) : "-" },
     { label: "Speed / course", value: p ? `${dash(p.sog)} kn / ${dash(p.cog)} deg` : "-" },
     { label: "Status", value: p?.nav_status != null ? (NAV_STATUS[p.nav_status] ?? String(p.nav_status)) : "-" },
-    { label: "Last seen", value: p ? fmt(p.ts) : "-" },
+    { label: "Last seen", value: p?.ts ? fmt(p.ts) : "-" },
   ];
 }
 

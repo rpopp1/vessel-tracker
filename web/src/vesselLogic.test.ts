@@ -82,3 +82,35 @@ describe("hasDrawableTrack", () => {
     expect(hasDrawableTrack(f({ type: "LineString", coordinates: [[0, 0]] }))).toBe(false);
   });
 });
+
+describe("detailRows null safety", () => {
+  const rows = (v: unknown) => detailRows(v as VesselDetail, (s) => `F(${s})`);
+  const get = (r: ReturnType<typeof rows>, l: string) => r.find((x) => x.label === l)!;
+  it("null cargo_group", () => {
+    const r = rows({ ...base, cargo_group: null });
+    expect(get(r, "Cargo group")).toEqual({ label: "Cargo group", value: "-", tag: "inferred" });
+  });
+  it("undefined size_class", () => {
+    expect(get(rows({ ...base, size_class: undefined }), "Size class").value).toBe("-");
+  });
+  it("null position and partial position", () => {
+    const r = rows({ ...base, position: null });
+    expect(get(r, "Speed / course").value).toBe("-");
+    expect(get(r, "Status").value).toBe("-");
+    expect(get(r, "Last seen").value).toBe("-");
+    const p = rows({ ...base, position: { lon: 1, lat: 2 } });
+    expect(get(p, "Speed / course").value).toBe("- kn / - deg");
+    expect(get(p, "Status").value).toBe("-");
+    expect(get(p, "Last seen").value).toBe("-");
+  });
+  it("entirely sparse object", () => {
+    const r = rows({});
+    expect(r).toHaveLength(12);
+    expect(get(r, "Cargo group")).toEqual({ label: "Cargo group", value: "-", tag: "inferred" });
+    expect(get(r, "Laden")).toEqual({ label: "Laden", value: "-", tag: "estimated" });
+    for (const l of ["Size class", "Flag", "Dimensions", "Draught", "Destination", "ETA", "Speed / course", "Status", "Last seen"]) {
+      expect(get(r, l).value).toBe("-");
+    }
+    expect(get(r, "MMSI / IMO").value).toBe("- / -");
+  });
+});
