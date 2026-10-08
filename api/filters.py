@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 
@@ -53,22 +54,65 @@ def build_where(f: VesselFilters, stale_hours: float, skip: str | None = None) -
     return " AND ".join(clauses), params
 
 
-def filters_from_json(d: dict) -> VesselFilters:
-    """Build filters from a websocket subscription message. Garbage yields defaults."""
+MAX_LIST_ITEMS = 50
+
+
+def _finite(x) -> float | None:
+    if isinstance(x, bool):
+        return None
     try:
-        bbox = d.get("bbox")
-        bbox = tuple(float(x) for x in bbox) if bbox is not None else None
-        if bbox is not None and len(bbox) != 4:
-            bbox = None
-        return VesselFilters(
-            bbox=bbox,
-            size_class=tuple(d.get("size_class") or ()),
-            cargo_group=tuple(d.get("cargo_group") or ()),
-            laden=d.get("laden"),
-            flag=tuple(d.get("flag") or ()),
-            nav_status=tuple(int(x) for x in (d.get("nav_status") or ())),
-            min_speed=None if d.get("min_speed") is None else float(d["min_speed"]),
-            max_speed=None if d.get("max_speed") is None else float(d["max_speed"]),
-        )
-    except (TypeError, ValueError):
+        v = float(x)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return v if math.isfinite(v) else None
+
+
+def _str_list(v) -> tuple[str, ...]:
+    if not isinstance(v, (list, tuple)):
+        return ()
+    return tuple(str(x) for x in v[:MAX_LIST_ITEMS] if isinstance(x, (str, int)) and not isinstance(x, bool))
+
+
+def _int_list(v) -> tuple[int, ...]:
+    if not isinstance(v, (list, tuple)):
+        return ()
+    out = []
+    for x in v:
+        if isinstance(x, bool) or not isinstance(x, (str, int)):
+            continue
+        try:
+            out.append(int(x))
+        except ValueError:
+            continue
+        if len(out) >= MAX_LIST_ITEMS:
+            break
+    return tuple(out)
+
+
+def _bbox(v) -> tuple[float, float, float, float] | None:
+    if not isinstance(v, (list, tuple)) or len(v) != 4:
+        return None
+    vals = [_finite(x) for x in v]
+    if any(x is None for x in vals):
+        return None
+    w, s, e, n = vals
+    if not (-90 <= s <= 90 and -90 <= n <= 90 and -180 <= w <= 180 and -180 <= e <= 180):
+        return None
+    return (w, s, e, n)
+
+
+def filters_from_json(d) -> VesselFilters:
+    """Build filters from a websocket subscription message. Never raises; each bad field falls back to its default."""
+    if not isinstance(d, dict):
         return VesselFilters()
+    laden = d.get("laden")
+    return VesselFilters(
+        bbox=_bbox(d.get("bbox")),
+        size_class=_str_list(d.get("size_class")),
+        cargo_group=_str_list(d.get("cargo_group")),
+        laden=laden if isinstance(laden, bool) else None,
+        flag=_str_list(d.get("flag")),
+        nav_status=_int_list(d.get("nav_status")),
+        min_speed=_finite(d.get("min_speed")),
+        max_speed=_finite(d.get("max_speed")),
+    )

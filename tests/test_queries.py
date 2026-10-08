@@ -77,13 +77,55 @@ def test_search(db):  # Review Focus 5
     assert queries.search(db, "9" * 40) == []                                  # absurd digit string
 
 
+def _db_now(db):
+    return db.execute("SELECT now() AS t").fetchone()["t"]
+
+
 def test_updated_since_returns_only_newer(db):
     seed_vessel(db, 1, lon=1, lat=1)
-    t0 = datetime.now(timezone.utc)
-    assert queries.updated_since(db, VesselFilters(), t0, CFG)[0] == []
-    db.execute("UPDATE latest_position SET updated_at = now()")
-    feats, newest = queries.updated_since(db, VesselFilters(), t0, CFG)
-    assert [f["properties"]["mmsi"] for f in feats] == [1] and newest > t0
+    t0 = _db_now(db)
+    assert queries.updated_since(db, VesselFilters(), (t0, 0), CFG)[0] == []
+    db.execute("UPDATE latest_position SET updated_at = now() + interval '1 second'")
+    feats, cursor = queries.updated_since(db, VesselFilters(), (t0, 0), CFG)
+    assert [f["properties"]["mmsi"] for f in feats] == [1] and cursor[0] > t0 and cursor[1] == 1
+
+
+def test_updated_since_no_rows_keeps_cursor(db):
+    cur = (_db_now(db), 7)
+    feats, out = queries.updated_since(db, VesselFilters(), cur, CFG)
+    assert feats == [] and out == cur
+
+
+def test_updated_since_cursor_pages_through_identical_timestamps(db):
+    t0 = _db_now(db)
+    for m in (5, 3, 1, 4, 2):
+        seed_vessel(db, m, lon=m, lat=1)
+    db.execute("UPDATE latest_position SET updated_at = %s", (t0 + timedelta(seconds=5),))
+    cursor, seen = (t0, 0), []
+    for _ in range(10):
+        feats, cursor = queries.updated_since(db, VesselFilters(), cursor, CFG, limit=2)
+        if not feats:
+            break
+        seen += [f["properties"]["mmsi"] for f in feats]
+    assert seen == [1, 2, 3, 4, 5]
+
+
+def test_search_rejects_non_ascii_digits_and_nul(db):
+    seed_vessel(db, 111111111, name="NORDIC MARS")
+    for q in ("\u00b2\u00b2", "\u0663\u0663\u0663", "ab\x00cd"):
+        assert queries.search(db, q) == []
+
+
+def test_track_keeps_newest_points_and_true_count(db, monkeypatch):
+    monkeypatch.setattr(queries, "MAX_TRACK_ROWS", 3)
+    seed_vessel(db, 1)
+    now = datetime.now(timezone.utc)
+    for i in range(5):
+        db.execute("INSERT INTO positions (mmsi, ts, geom) VALUES (1, %s, ST_SetSRID(ST_MakePoint(%s, 1),4326))",
+                   (now - timedelta(hours=5 - i), float(i)))
+    tr = queries.vessel_track(db, 1, now - timedelta(days=1), now)
+    assert tr["properties"]["point_count"] == 5
+    assert tr["geometry"]["coordinates"] == [[[2.0, 1.0], [3.0, 1.0], [4.0, 1.0]]]
 
 
 def test_split_antimeridian_and_downsample():  # Review Focus 2

@@ -12,6 +12,7 @@ from common.config import Config
 CLUSTER_ZOOM = 5
 MAX_FEATURES = 5000
 MAX_TRACK_POINTS = 1000
+MAX_TRACK_ROWS = 50000
 
 _FROM = "FROM latest_position lp JOIN vessels v ON v.mmsi = lp.mmsi"
 _COLS = """v.mmsi, v.name, v.size_class, v.cargo_group, v.laden, v.flag,
@@ -48,15 +49,16 @@ def list_vessels(conn: psycopg.Connection, f: VesselFilters, zoom: int | None, c
     return {"type": "FeatureCollection", "features": [_feature(r) for r in rows]}
 
 
-def updated_since(conn, f: VesselFilters, since: datetime, cfg: Config, limit: int = 2000):
+def updated_since(conn, f: VesselFilters, cursor: tuple[datetime, int], cfg: Config, limit: int = 2000):
+    """Rows strictly after the (updated_at, mmsi) cursor; returns (features, new_cursor)."""
     where, params = build_where(f, cfg.stale_hours)
     rows = conn.execute(
-        f"SELECT {_COLS}, lp.updated_at {_FROM} WHERE {where} AND lp.updated_at > %s "
-        f"ORDER BY lp.updated_at LIMIT %s",
-        [*params, since, limit],
+        f"SELECT {_COLS}, lp.updated_at {_FROM} WHERE {where} AND (lp.updated_at, lp.mmsi) > (%s, %s) "
+        f"ORDER BY lp.updated_at, lp.mmsi LIMIT %s",
+        [*params, cursor[0], cursor[1], limit],
     ).fetchall()
-    newest = rows[-1]["updated_at"] if rows else since
-    return [_feature(r) for r in rows], newest
+    new_cursor = (rows[-1]["updated_at"], rows[-1]["mmsi"]) if rows else cursor
+    return [_feature(r) for r in rows], new_cursor
 
 
 def vessel_detail(conn, mmsi: int) -> dict | None:
@@ -101,25 +103,27 @@ def downsample(items: list, max_points: int) -> list:
 
 
 def vessel_track(conn, mmsi: int, start: datetime, end: datetime) -> dict:
+    pred = "mmsi = %s AND ts >= %s AND ts <= %s"
+    total = conn.execute(f"SELECT count(*) AS n FROM positions WHERE {pred}", (mmsi, start, end)).fetchone()["n"]
     rows = conn.execute(
-        "SELECT ST_X(geom) AS lon, ST_Y(geom) AS lat FROM positions "
-        "WHERE mmsi = %s AND ts >= %s AND ts <= %s ORDER BY ts LIMIT 50000",
-        (mmsi, start, end),
+        f"SELECT ST_X(geom) AS lon, ST_Y(geom) AS lat FROM positions WHERE {pred} ORDER BY ts DESC LIMIT %s",
+        (mmsi, start, end, MAX_TRACK_ROWS),
     ).fetchall()
+    rows.reverse()  # newest rows kept, back in chronological order
     coords = downsample([[r["lon"], r["lat"]] for r in rows], MAX_TRACK_POINTS)
     lines = [ln for ln in split_antimeridian(coords) if len(ln) >= 2]
     return {
         "type": "Feature",
         "geometry": {"type": "MultiLineString", "coordinates": lines},
-        "properties": {"mmsi": mmsi, "point_count": len(rows), "from": start, "to": end},
+        "properties": {"mmsi": mmsi, "point_count": total, "from": start, "to": end},
     }
 
 
 def search(conn, q: str, limit: int = 20) -> list[dict]:
     q = q.strip()
-    if len(q) < 2:
+    if len(q) < 2 or "\x00" in q:
         return []
-    if q.isdigit():
+    if q.isascii() and q.isdigit():
         if len(q) > 12:
             return []
         n = int(q)
