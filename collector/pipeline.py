@@ -50,8 +50,8 @@ class Pipeline:
             draught_max_m=dmax,
             laden=estimate_laden(cls.size_class, draught, dmin, dmax, self.cfg),
         )
-        self.tankers[msg.mmsi] = state
         self.store.upsert_vessel(msg, cls, state)
+        self.tankers[msg.mmsi] = state  # only once the DB has the row
         self.counters["tanker_static"] += 1
 
     def _position(self, msg: PositionMsg) -> None:

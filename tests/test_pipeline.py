@@ -74,3 +74,21 @@ def test_type_change_to_non_tanker_forgets_vessel():
     p.handle(parse_message(with_static(Type=70)))
     p.handle(parse_message(POSITION_REPORT))
     assert store.positions == []
+
+
+class FailingUpsertStore(FakeStore):
+    def upsert_vessel(self, msg, cls, state):
+        raise RuntimeError("db down")
+
+
+def test_failed_upsert_leaves_memory_consistent():
+    store = FailingUpsertStore()
+    p = Pipeline(store, CFG)
+    try:
+        p.handle(parse_message(SHIP_STATIC_TANKER))
+    except RuntimeError:
+        pass
+    assert 636012345 not in p.tankers
+    assert p.counters["tanker_static"] == 0
+    p.handle(parse_message(POSITION_REPORT))
+    assert store.positions == [] and p.counters["position_unknown"] == 1

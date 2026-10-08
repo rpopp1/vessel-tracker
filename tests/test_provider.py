@@ -114,3 +114,107 @@ async def test_backoff_resets_after_successful_message(monkeypatch):
     delays, got = await _run_recording_delays(monkeypatch, handler, 3)
     assert len(got) == 1
     assert delays == [0.01, 0.01, 0.02]
+
+
+async def _collect(provider, n, timeout=10):
+    got = []
+    async with asyncio.timeout(timeout):
+        gen = provider.messages()
+        async for msg in gen:
+            got.append(msg)
+            if len(got) == n:
+                break
+        await gen.aclose()
+    return got
+
+
+async def test_received_counts_frames_and_lifecycle_logged(caplog):
+    import logging
+    caplog.set_level(logging.INFO, logger="collector")
+
+    async def handler(ws):
+        await ws.recv()
+        await ws.send("not json")
+        await ws.send(json.dumps(POSITION_REPORT))
+        await asyncio.sleep(5)
+
+    async with serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        provider = AISStreamProvider(api_key="fake-test-key", url=f"ws://127.0.0.1:{port}", initial_delay=0.01)
+        assert provider.received == 0 and provider.last_received is None
+        await _collect(provider, 1)
+    assert provider.received == 2 and provider.dropped == 1
+    assert provider.last_received is not None
+    text = "\n".join(r.getMessage() for r in caplog.records)
+    assert "connected" in text and "subscription sent" in text and "first message received" in text
+    assert "fake-test-key" not in text and "APIKey" not in text and "BoundingBoxes" not in text
+
+
+async def test_first_drop_warned_once_per_connection(caplog):
+    import logging
+    caplog.set_level(logging.INFO, logger="collector")
+    connections = 0
+
+    async def handler(ws):
+        nonlocal connections
+        connections += 1
+        await ws.recv()
+        await ws.send("not json")
+        await ws.send("not json again")
+        await ws.send(json.dumps({"error": "SECRET-BODY"}))
+        await ws.send(json.dumps({"MessageType": "Weird" * 20, "Message": {"x": "SECRET-BODY"}}))
+        if connections == 1:
+            await ws.send(json.dumps(POSITION_REPORT))
+            await ws.close()
+        else:
+            await ws.send(json.dumps(POSITION_REPORT))
+            await ws.send("not json")
+            await asyncio.sleep(5)
+
+    async with serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        provider = AISStreamProvider(api_key="fake-test-key", url=f"ws://127.0.0.1:{port}", initial_delay=0.01)
+        await _collect(provider, 2)
+    warns = [r.getMessage() for r in caplog.records if r.levelname == "WARNING" and "drop" in r.getMessage().lower()]
+    assert len(warns) == 2                      # one per connection, later drops silent
+    assert "not JSON" in warns[0]
+    assert all("SECRET-BODY" not in r.getMessage() for r in caplog.records)
+    assert all("fake-test-key" not in r.getMessage() for r in caplog.records)
+
+
+async def test_unsupported_type_reason_is_truncated(caplog):
+    import logging
+    caplog.set_level(logging.INFO, logger="collector")
+
+    async def handler(ws):
+        await ws.recv()
+        await ws.send(json.dumps({"MessageType": "W" * 200, "Message": {}}))
+        await ws.send(json.dumps(POSITION_REPORT))
+        await asyncio.sleep(5)
+
+    async with serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        provider = AISStreamProvider(api_key="fake-test-key", url=f"ws://127.0.0.1:{port}", initial_delay=0.01)
+        await _collect(provider, 1)
+    warn = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"][0]
+    assert "unsupported message type" in warn and "W" * 41 not in warn and "W" * 40 in warn
+
+
+async def test_connect_timeout_is_explicit_and_logged_as_reconnect_warning(monkeypatch, caplog):
+    import logging
+    from collector.providers import aisstream
+    caplog.set_level(logging.INFO, logger="collector")
+    seen = {}
+
+    def fake_connect(url, **kw):
+        seen.update(kw)
+        raise TimeoutError("timed out during opening handshake")
+
+    async def handler(ws):
+        await ws.recv()
+
+    monkeypatch.setattr(aisstream, "connect", fake_connect)
+    delays, got = await _run_recording_delays(monkeypatch, handler, 2)
+    assert seen["open_timeout"] == 15
+    warns = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    assert any("TimeoutError" in w and "reconnecting" in w for w in warns)
