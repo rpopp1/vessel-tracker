@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { getJSON } from "../api";
 import { DEFAULT_COLOR, SIZE_COLORS } from "../colors";
 import { CLUSTER_ZOOM, filtersToParams, normalizeBbox, type Filters } from "../filters";
+import { pickTextFont, vesselOpacityExpression } from "../mapStyle";
 import type { LiveState, Meta } from "../types";
 
 type Props = {
@@ -39,6 +40,8 @@ export default function MapView({ filters, meta, onSelect, track, flyTo }: Props
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
   const fadeHours = meta?.fade_hours ?? 2;
+  const fadeHoursRef = useRef(fadeHours);
+  fadeHoursRef.current = fadeHours;
 
   // create the map once
   useEffect(() => {
@@ -61,9 +64,15 @@ export default function MapView({ filters, meta, onSelect, track, flyTo }: Props
           "circle-radius": ["step", ["get", "count"], 12, 10, 16, 50, 22, 200, 28],
         },
       });
+      // reuse a glyph font the basemap style actually serves, rather than guessing a name
+      const textFont = pickTextFont(map.getStyle());
+      if (!textFont) console.warn("no text-font found in basemap style; cluster counts may not render");
       map.addLayer({
         id: "cluster-count", type: "symbol", source: "vessels", filter: ["has", "cluster"],
-        layout: { "text-field": ["get", "count"], "text-size": 12, "text-allow-overlap": true },
+        layout: {
+          "text-field": ["get", "count"], "text-size": 12, "text-allow-overlap": true,
+          ...(textFont ? { "text-font": textFont } : {}),
+        },
         paint: { "text-color": "#fff" },
       });
       map.addLayer({
@@ -78,8 +87,7 @@ export default function MapView({ filters, meta, onSelect, track, flyTo }: Props
         paint: {
           "icon-color": ["match", ["get", "size_class"],
             ...Object.entries(SIZE_COLORS).flat(), DEFAULT_COLOR] as unknown as maplibregl.ExpressionSpecification,
-          "icon-opacity": ["case", [">", ["to-number", ["get", "age_h"], 0], fadeHours], 0.35,
-            ["==", ["get", "laden"], null], 0.6, 1],
+          "icon-opacity": vesselOpacityExpression(fadeHoursRef.current) as unknown as maplibregl.ExpressionSpecification,
         },
       });
       map.on("click", "vessels", (e) => {
@@ -125,8 +133,15 @@ export default function MapView({ filters, meta, onSelect, track, flyTo }: Props
   }, [track, ready]);
 
   useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    map.setPaintProperty("vessels", "icon-opacity", vesselOpacityExpression(fadeHours) as unknown as maplibregl.ExpressionSpecification);
+  }, [fadeHours, ready]);
+
+  useEffect(() => {
     if (flyTo) mapRef.current?.flyTo({ center: [flyTo.lon, flyTo.lat], zoom: Math.max(mapRef.current.getZoom(), 8) });
-  }, [flyTo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flyTo?.nonce, flyTo?.lon, flyTo?.lat]);
 
   void CLUSTER_ZOOM;
   return <div ref={el} className="map" />;
