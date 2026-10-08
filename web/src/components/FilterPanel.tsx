@@ -5,20 +5,26 @@ import { emptyFilters, filtersToParams, NAV_STATUS, toggle, type Filters } from 
 import { CARGO_LABELS, cargoLabel, hasActiveFilters, navKeysWithSelected, topFlags } from "../panelLogic";
 import type { Meta, Stats } from "../types";
 
-type Props = { filters: Filters; onChange: (f: Filters) => void; meta: Meta | null; onStats?: (s: Stats | null) => void };
+type Props = { filters: Filters; onChange: (f: Filters) => void; meta: Meta | null; onStats?: (s: Stats | null) => void; onFetchState?: (ok: boolean) => void };
 
-export default function FilterPanel({ filters, onChange, meta, onStats }: Props) {
+export default function FilterPanel({ filters, onChange, meta, onStats, onFetchState }: Props) {
   const [stats, setStats] = useState<Stats | null>(null);
   const onStatsRef = useRef(onStats);
   onStatsRef.current = onStats;
+  const onFetchStateRef = useRef(onFetchState);
+  onFetchStateRef.current = onFetchState;
 
   useEffect(() => {
     const ctl = new AbortController();
     const load = () =>
       getJSON<Stats>(`/api/stats?${filtersToParams(filters)}`, ctl.signal)
-        .then((s) => { setStats(s); onStatsRef.current?.(s); })
+        .then((s) => { setStats(s); onStatsRef.current?.(s); onFetchStateRef.current?.(true); })
         // keep previous counts on failure; stats stays null only if never loaded
-        .catch((e) => { if (e.name !== "AbortError") console.error(e); });
+        .catch((e) => {
+          if (e.name === "AbortError") return;
+          console.error(e);
+          onFetchStateRef.current?.(false);
+        });
     load();
     const t = setInterval(load, 15000);
     return () => { ctl.abort(); clearInterval(t); };

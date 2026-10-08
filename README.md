@@ -127,7 +127,7 @@ npm test
 npm run build
 ```
 
-DB tests need `TEST_DATABASE_URL` set and the test DB migrated (`python -m db.migrate --test`); otherwise they skip. `-rs` prints the skip reasons so you can notice them.
+DB tests need `TEST_DATABASE_URL` set and the test DB migrated (`python -m db.migrate --test`); otherwise they skip. `-rs` prints the skip reasons so you can notice them. The DB tests TRUNCATE their database, so they refuse to run (a hard failure, not a skip) if `TEST_DATABASE_URL` equals `DATABASE_URL` or if the connected database name does not contain "test".
 
 The automated tests do NOT cover the map's visual rendering or live websocket behavior. Those were never verified in a browser during the build. Check by hand the first time:
 
@@ -136,6 +136,7 @@ The automated tests do NOT cover the map's visual rendering or live websocket be
 - At zoom 5 and above, individual markers appear, and the status chip shows Live with a recent age. Below zoom 5 the chip reads "Zoom in for live updates".
 - Changing filters changes the counts.
 - Clicking a vessel opens the detail panel.
+- The map re-fetches vessels every 60 seconds while the tab is visible (and when you return to it). A banner under the search bar reports an unreachable API, "No vessels match these filters.", or an empty database. These banners are also unverified in a browser.
 - The track buttons show a track.
 
 ## Tuning classification
@@ -148,6 +149,8 @@ Edit `config/classification.yaml`. The values are starting points, not calibrate
 - `fade_hours`: the UI fades markers older than this. Restart the API after changing it (it reads the config).
 - `stale_hours`: vessels older than this are hidden from the live map. Restart the API after changing it.
 - `retention_months`: used by pruning.
+
+The config is validated on load, and the API and collector refuse to start with a clear `ValueError` if: `retention_months < 1`; `fade_hours` or `stale_hours` is not above 0, or `stale_hours < fade_hours`; `size_classes` is empty, has duplicate names, or its smallest class does not have `min_length_m: 0`; any `laden_draught_m <= 0`; `laden_ratio` is outside (0, 1]; or `observed_range_min_m <= 0`.
 
 Size class and laden changes apply per vessel: restart the collector, and each vessel is re-classified the next time it sends a static message (vessels that stay quiet keep their old class).
 

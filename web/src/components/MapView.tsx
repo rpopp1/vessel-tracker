@@ -6,6 +6,7 @@ import { DEFAULT_COLOR, SIZE_COLORS } from "../colors";
 import { CLUSTER_ZOOM, filtersToParams, normalizeBbox, type Filters } from "../filters";
 import { pickTextFont, vesselOpacityExpression } from "../mapStyle";
 import { mergeFeatures } from "../liveLogic";
+import { REFRESH_INTERVAL_MS, shouldRefresh } from "../refresh";
 import type { LiveState, Meta } from "../types";
 import { useLiveSocket } from "../useLiveSocket";
 
@@ -17,6 +18,7 @@ type Props = {
   flyTo: { lon: number; lat: number; nonce: number } | null;
   onLiveState?: (s: LiveState) => void;
   onLiveError?: (detail: string | null) => void;
+  onFetchState?: (ok: boolean) => void;
 };
 
 const STYLE = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
@@ -34,7 +36,7 @@ function triangle(solid: boolean): ImageData {
   return g.getImageData(0, 0, s, s);
 }
 
-export default function MapView({ filters, meta, onSelect, track, flyTo, onLiveState, onLiveError }: Props) {
+export default function MapView({ filters, meta, onSelect, track, flyTo, onLiveState, onLiveError, onFetchState }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [ready, setReady] = useState(false);
@@ -42,6 +44,8 @@ export default function MapView({ filters, meta, onSelect, track, flyTo, onLiveS
   const featuresRef = useRef<Map<number, GeoJSON.Feature>>(new Map());
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const onFetchStateRef = useRef(onFetchState);
+  onFetchStateRef.current = onFetchState;
   const fadeHours = meta?.fade_hours ?? 2;
   const fadeHoursRef = useRef(fadeHours);
   fadeHoursRef.current = fadeHours;
@@ -113,21 +117,36 @@ export default function MapView({ filters, meta, onSelect, track, flyTo, onLiveS
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // fetch vessels whenever the view or filters change
+  // fetch vessels when the view or filters change, every REFRESH_INTERVAL_MS while the tab is visible
+  // (age_h is computed at fetch time and the websocket never pushes removals), and when the tab returns
   useEffect(() => {
     const map = mapRef.current;
     if (!ready || !map || !view) return;
-    const ctl = new AbortController();
     const params = filtersToParams(filters, { bbox: view.bbox, zoom: view.zoom });
-    getJSON<GeoJSON.FeatureCollection>(`/api/vessels?${params}`, ctl.signal)
-      .then((fc) => {
-        featuresRef.current = new Map(
-          fc.features.filter((f) => !f.properties?.cluster).map((f) => [f.properties!.mmsi as number, f]),
-        );
-        (map.getSource("vessels") as maplibregl.GeoJSONSource).setData(fc);
-      })
-      .catch((e) => { if (e.name !== "AbortError") console.error(e); });
-    return () => ctl.abort();
+    let ctl: AbortController | null = null;
+    const run = () => {
+      ctl?.abort(); // a newer run supersedes an in-flight one, so a slow response never overwrites newer data
+      const mine = (ctl = new AbortController());
+      getJSON<GeoJSON.FeatureCollection>(`/api/vessels?${params}`, mine.signal)
+        .then((fc) => {
+          if (mine.signal.aborted) return;
+          featuresRef.current = new Map(
+            fc.features.filter((f) => !f.properties?.cluster).map((f) => [f.properties!.mmsi as number, f]),
+          );
+          (map.getSource("vessels") as maplibregl.GeoJSONSource).setData(fc);
+          onFetchStateRef.current?.(true);
+        })
+        .catch((e) => {
+          if (e.name === "AbortError") return;
+          console.error(e);
+          onFetchStateRef.current?.(false);
+        });
+    };
+    const refreshIfVisible = () => { if (shouldRefresh(document.visibilityState === "visible")) run(); };
+    run();
+    const t = setInterval(refreshIfVisible, REFRESH_INTERVAL_MS);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+    return () => { ctl?.abort(); clearInterval(t); document.removeEventListener("visibilitychange", refreshIfVisible); };
   }, [ready, view, filters]);
 
   useEffect(() => {
