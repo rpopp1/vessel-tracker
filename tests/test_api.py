@@ -2,9 +2,12 @@ import queue
 import threading
 import time
 
+import psycopg
 import pytest
+from starlette.websockets import WebSocketDisconnect
 from fastapi.testclient import TestClient
 
+import api.main as api_main
 from api.main import create_app
 from common.database import connect, database_url
 from tests.helpers import seed_vessel
@@ -146,3 +149,129 @@ def test_ws_bad_subscription_errors_once_then_recovers(client, db):
         assert [f["properties"]["mmsi"] for f in msg["features"]] == [1]
     # server still serves REST after the bad subscription
     assert client.get("/api/meta").status_code == 200
+
+
+# ---- review fix round 1 ------------------------------------------------------------------------
+
+def test_ws_stale_poll_failure_does_not_clobber_new_subscription(client, db, monkeypatch):
+    seed_vessel(db, 1, lon=10, lat=10)
+    seed_vessel(db, 2, lon=80, lat=10)
+    real_poll, real_now = api_main._poll_db, api_main._db_now
+    started, release, sub_seen = threading.Event(), threading.Event(), threading.Event()
+    calls = {"poll": 0, "now": 0}
+
+    def poll(*a):
+        calls["poll"] += 1
+        if calls["poll"] == 1:
+            started.set()
+            release.wait(10)
+            raise ValueError("stale failure")
+        return real_poll(*a)
+
+    def now(*a):
+        calls["now"] += 1
+        if calls["now"] == 2:  # the replacement subscription
+            sub_seen.set()
+        return real_now(*a)
+
+    monkeypatch.setattr(api_main, "_poll_db", poll)
+    monkeypatch.setattr(api_main, "_db_now", now)
+    with client.websocket_connect("/ws/positions") as ws:
+        assert started.wait(10)
+        ws.send_json({"bbox": [0, 0, 20, 20]})
+        assert sub_seen.wait(10)
+        time.sleep(0.3)  # let the reader install the subscription
+        release.set()
+        with Feeder(["UPDATE latest_position SET updated_at = now() WHERE mmsi = 2",
+                     "UPDATE latest_position SET updated_at = now() WHERE mmsi = 1"]):
+            msg = receive(ws)
+    assert msg["type"] == "positions", msg  # no error frame for the replaced subscription
+    assert [f["properties"]["mmsi"] for f in msg["features"]] == [1]
+
+
+def test_ws_reader_failure_keeps_previous_subscription(client, db, monkeypatch):
+    seed_vessel(db, 1, lon=10, lat=10)
+    seed_vessel(db, 2, lon=80, lat=10)
+    real_now = api_main._db_now
+    calls = {"n": 0}
+
+    def now(*a):
+        calls["n"] += 1
+        if calls["n"] == 3:  # 1 = accept, 2 = first subscription, 3 = second subscription
+            raise psycopg.OperationalError("boom")
+        return real_now(*a)
+
+    monkeypatch.setattr(api_main, "_db_now", now)
+    with client.websocket_connect("/ws/positions") as ws:
+        ws.send_json({"bbox": [0, 0, 20, 20]})
+        ws.send_json({"bbox": [60, 0, 100, 20]})
+        assert receive(ws) == {"type": "error", "detail": "service unavailable"}
+        with Feeder(["UPDATE latest_position SET updated_at = now() WHERE mmsi = 2",
+                     "UPDATE latest_position SET updated_at = now() WHERE mmsi = 1"]):
+            msg = receive(ws)
+    assert msg["type"] == "positions"
+    assert [f["properties"]["mmsi"] for f in msg["features"]] == [1]  # previous bbox still in force
+
+
+def test_ws_bad_json_is_an_error_frame_not_a_dead_connection(client, db):
+    seed_vessel(db, 1)
+    with client.websocket_connect("/ws/positions") as ws:
+        ws.send_text("{not json")
+        assert receive(ws) == {"type": "error", "detail": "invalid subscription"}
+        with Feeder(["UPDATE latest_position SET updated_at = now()"]):
+            assert receive(ws)["type"] == "positions"
+
+
+def test_ws_initial_fetch_failure_sends_error_and_closes_1011(client, monkeypatch):
+    def now(*a):
+        raise psycopg.OperationalError("down")
+
+    monkeypatch.setattr(api_main, "_db_now", now)
+    with client.websocket_connect("/ws/positions") as ws:
+        assert ws.receive_json() == {"type": "error", "detail": "service unavailable"}
+        with pytest.raises(WebSocketDisconnect) as e:
+            ws.receive_json()
+    assert e.value.code == 1011
+
+
+def test_ws_transient_poll_failure_keeps_filters_and_recovers(client, db, monkeypatch):
+    seed_vessel(db, 1, lon=10, lat=10)
+    seed_vessel(db, 2, lon=80, lat=10)
+    real_poll = api_main._poll_db
+    calls = {"n": 0}
+
+    def poll(*a):
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise psycopg.OperationalError("pool timeout")
+        return real_poll(*a)
+
+    monkeypatch.setattr(api_main, "_poll_db", poll)
+    with client.websocket_connect("/ws/positions") as ws:
+        ws.send_json({"bbox": [0, 0, 20, 20]})
+        assert receive(ws) == {"type": "error", "detail": "temporarily unavailable"}
+        with Feeder(["UPDATE latest_position SET updated_at = now() WHERE mmsi = 2",
+                     "UPDATE latest_position SET updated_at = now() WHERE mmsi = 1"]):
+            msg = receive(ws)  # a second error frame (or a reset to defaults) would show up here
+    assert msg["type"] == "positions"
+    assert [f["properties"]["mmsi"] for f in msg["features"]] == [1]
+
+
+@pytest.mark.parametrize("bbox", ["nan,0,1,1", "0,0,inf,1", "0,-91,1,1", "0,0,1,91", "-181,0,1,1",
+                                  "0,0,181,1", "0,5,1,4", "1,2,3", "1,2,3,4,5", "1,2,3,"])
+def test_bad_bbox_values_are_422(client, bbox):
+    r = client.get("/api/vessels", params={"bbox": bbox})
+    assert r.status_code == 422, bbox
+    assert client.get("/api/stats", params={"bbox": bbox}).status_code == 422
+
+
+def test_bbox_antimeridian_and_empty_still_allowed(client, db):
+    seed_vessel(db, 1, lon=179, lat=0)
+    assert client.get("/api/vessels", params={"bbox": "170,-10,-170,10"}).status_code == 200
+    assert client.get("/api/vessels", params={"bbox": ""}).status_code == 200
+
+
+def test_track_from_after_to_is_422(client, db):
+    seed_vessel(db, 1)
+    r = client.get("/api/vessels/1/track", params={"from": "2026-01-02T00:00:00Z", "to": "2026-01-01T00:00:00Z"})
+    assert r.status_code == 422

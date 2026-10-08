@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
@@ -25,11 +26,29 @@ MAX_MMSI = 10**12  # far below bigint; real MMSIs are 9 digits
 def _parse_bbox(raw: str | None):
     if not raw:
         return None
+    bad = HTTPException(422, "bbox must be four numbers: west,south,east,north")
+    parts = raw.split(",")
+    if len(parts) != 4:
+        raise bad
     try:
-        w, s, e, n = (float(x) for x in raw.split(","))
+        w, s, e, n = (float(x) for x in parts)
     except ValueError:
-        raise HTTPException(422, "bbox must be four numbers: west,south,east,north")
+        raise bad
+    if not all(math.isfinite(v) for v in (w, s, e, n)):
+        raise bad
+    if not (-180 <= w <= 180 and -180 <= e <= 180 and -90 <= s <= 90 and -90 <= n <= 90 and s <= n):
+        raise bad  # west > east is fine: it means the box crosses the antimeridian
     return (w, s, e, n)
+
+
+def _db_now(pool) -> datetime:
+    with pool.connection() as conn:
+        return conn.execute("SELECT now() AS t").fetchone()["t"]
+
+
+def _poll_db(pool, f: VesselFilters, cursor: tuple[datetime, int], cfg: Config):
+    with pool.connection() as conn:
+        return queries.updated_since(conn, f, cursor, cfg)
 
 
 def create_app(conninfo: str | None = None, cfg: Config | None = None, poll_seconds: float = 2.0) -> FastAPI:
@@ -92,6 +111,11 @@ def create_app(conninfo: str | None = None, cfg: Config | None = None, poll_seco
             raise HTTPException(404, "vessel not found")
         end = end or datetime.now(timezone.utc)
         start = start or end - timedelta(hours=24)
+        try:
+            if start > end:
+                raise HTTPException(422, "'from' must not be after 'to'")
+        except TypeError:  # naive vs aware datetimes
+            raise HTTPException(422, "'from' and 'to' must both include a timezone or neither")
         return queries.vessel_track(conn, mmsi, start, end)
 
     @app.get("/api/search")
@@ -106,53 +130,91 @@ def create_app(conninfo: str | None = None, cfg: Config | None = None, poll_seco
     def meta():
         return queries.meta(cfg)
 
-    def _db_now() -> datetime:
-        with pool.connection() as conn:
-            return conn.execute("SELECT now() AS t").fetchone()["t"]
-
-    def _poll(f: VesselFilters, cursor: tuple[datetime, int]):
-        with pool.connection() as conn:
-            return queries.updated_since(conn, f, cursor, cfg)
-
     @app.websocket("/ws/positions")
     async def ws_positions(ws: WebSocket):
         await ws.accept()
+        send_lock = asyncio.Lock()
+
+        async def send(payload: dict):
+            async with send_lock:
+                await ws.send_json(jsonable_encoder(payload))
+
         # cursor starts at the DATABASE clock so app/db clock skew cannot lose or replay rows
-        state = {"filters": VesselFilters(), "cursor": (await asyncio.to_thread(_db_now), 0), "errored": False}
+        try:
+            start_cursor = (await asyncio.to_thread(_db_now, pool), 0)
+        except Exception as exc:
+            log.warning("websocket start failed: %s", type(exc).__name__)
+            try:
+                await send({"type": "error", "detail": "service unavailable"})
+                await ws.close(code=1011)
+            except (WebSocketDisconnect, RuntimeError):
+                pass
+            return
+        # gen increments whenever a subscription is installed; results of polls started under
+        # an older generation are discarded (success or failure)
+        state = {"filters": VesselFilters(), "cursor": start_cursor, "gen": 0,
+                 "invalid_sent": False, "outage": False}
 
         async def reader():
             try:
                 while True:
-                    data = await ws.receive_json()
-                    f = filters_from_json(data) if isinstance(data, dict) else VesselFilters()
-                    cursor = (await asyncio.to_thread(_db_now), 0)
-                    state["filters"], state["cursor"], state["errored"] = f, cursor, False
-            except (WebSocketDisconnect, RuntimeError, ValueError):
-                return
+                    try:
+                        data = await ws.receive_json()
+                    except (WebSocketDisconnect, RuntimeError):
+                        return
+                    except ValueError:
+                        await send({"type": "error", "detail": "invalid subscription"})
+                        continue
+                    try:
+                        f = filters_from_json(data) if isinstance(data, dict) else VesselFilters()
+                    except Exception as exc:
+                        log.warning("websocket subscription rejected: %s", type(exc).__name__)
+                        await send({"type": "error", "detail": "invalid subscription"})
+                        continue
+                    try:
+                        cursor = (await asyncio.to_thread(_db_now, pool), 0)
+                    except Exception as exc:
+                        log.warning("websocket subscription failed: %s", type(exc).__name__)
+                        await send({"type": "error", "detail": "service unavailable"})
+                        continue  # previous subscription stays in force
+                    state.update(filters=f, cursor=cursor, gen=state["gen"] + 1,
+                                 invalid_sent=False, outage=False)
+            except (WebSocketDisconnect, RuntimeError):
+                return  # peer went away while we were sending an error frame
 
         task = asyncio.create_task(reader())
         try:
             while not task.done():
                 await asyncio.sleep(poll_seconds)
-                f, cursor = state["filters"], state["cursor"]
+                f, cursor, gen = state["filters"], state["cursor"], state["gen"]
                 try:
-                    features, new_cursor = await asyncio.to_thread(_poll, f, cursor)
-                except Exception as exc:  # bad subscription must not kill the connection
-                    if not state["errored"]:
-                        log.warning("websocket poll failed: %s", type(exc).__name__)
-                        state["errored"] = True
-                        state["filters"] = VesselFilters()
-                        await ws.send_json({"type": "error", "detail": "invalid subscription"})
+                    features, new_cursor = await asyncio.to_thread(_poll_db, pool, f, cursor, cfg)
+                except Exception as exc:
+                    if state["gen"] != gen:
+                        continue  # subscription replaced while polling: discard the failure silently
+                    if isinstance(exc, (psycopg.errors.DataError, psycopg.ProgrammingError, ValueError)):
+                        if not state["invalid_sent"]:  # bad subscription values: reset once
+                            log.warning("websocket poll failed: %s", type(exc).__name__)
+                            state["invalid_sent"] = True
+                            state["filters"] = VesselFilters()
+                            await send({"type": "error", "detail": "invalid subscription"})
+                    elif not state["outage"]:  # transient (pool/connection): keep filters and cursor
+                        log.warning("websocket poll unavailable: %s", type(exc).__name__)
+                        state["outage"] = True
+                        await send({"type": "error", "detail": "temporarily unavailable"})
                     continue
-                state["errored"] = False
-                if state["cursor"] is not cursor:  # subscription changed while polling; drop stale result
-                    continue
+                if state["gen"] != gen:
+                    continue  # stale result
+                state["invalid_sent"] = state["outage"] = False
                 if features:
                     state["cursor"] = new_cursor
-                    await ws.send_json(jsonable_encoder({"type": "positions", "features": features}))
+                    await send({"type": "positions", "features": features})
         except (WebSocketDisconnect, RuntimeError):
             pass
         finally:
             task.cancel()
+            await asyncio.wait([task])  # wait() never raises the task's error, nor hides our own cancellation
+            if not task.cancelled():
+                task.exception()  # consume it so nothing is "never retrieved"
 
     return app
