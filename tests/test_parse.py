@@ -1,4 +1,7 @@
+import copy
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
@@ -70,10 +73,6 @@ def test_unknown_or_malformed_returns_none(raw):
 
 
 # --- real captured AISstream frames (public AIS data) ---
-import copy
-import json
-from pathlib import Path
-
 _REAL = json.loads((Path(__file__).parent / "fixtures" / "aisstream_real_frames.json").read_text(encoding="utf-8"))
 
 
