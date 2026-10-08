@@ -3,3 +3,18 @@ body { background: #0b1220; color: #e5e7eb; font-family: system-ui, sans-serif; 
 .app { position: relative; height: 100%; }
 .map { position: absolute; inset: 0; }
 .debug { position: absolute; top: 8px; right: 8px; background: #111827; padding: 6px 10px; border-radius: 6px; }
+
+.panel { position: absolute; z-index: 2; background: rgba(17, 24, 39, 0.92); border: 1px solid #1f2937; border-radius: 8px; padding: 10px; overflow-y: auto; max-height: calc(100% - 16px); }
+.panel.left { top: 8px; left: 8px; width: 250px; }
+.panel h1 { font-size: 15px; margin: 0 0 6px; display: flex; justify-content: space-between; }
+.panel h1 small { color: #9ca3af; font-weight: 400; }
+.panel h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #9ca3af; margin: 12px 0 4px; }
+.panel h2 em { font-style: normal; color: #f59e0b; margin-left: 4px; text-transform: none; }
+.row { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; border-radius: 4px; color: inherit; padding: 4px 6px; cursor: pointer; text-align: left; font: inherit; }
+.row:hover { background: #1f2937; }
+.row.active { background: #1d4ed8; }
+.row .label { flex: 1; }
+.row .count { color: #9ca3af; font-variant-numeric: tabular-nums; }
+.row.active .count { color: #fff; }
+.swatch { width: 10px; height: 10px; border-radius: 2px; }
+.clear { background: #374151; border: 0; color: inherit; border-radius: 4px; padding: 4px 8px; cursor: pointer; margin-bottom: 4px; }
