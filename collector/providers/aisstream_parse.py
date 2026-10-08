@@ -18,6 +18,11 @@ def parse_message(raw: dict) -> AISMessage | None:
     return None
 
 
+def _meta(raw: dict) -> dict:
+    # the live feed spells it "MetaData"; tolerate the older "Metadata" too
+    return raw.get("MetaData") or raw.get("Metadata")
+
+
 def _parse_ts(s: str) -> datetime:
     date_part, time_part = s.split()[:2]
     fmt = "%Y-%m-%d %H:%M:%S"
@@ -30,7 +35,7 @@ def _parse_ts(s: str) -> datetime:
 
 def _position(raw: dict) -> PositionMsg | None:
     p = raw["Message"]["PositionReport"]
-    ts = _parse_ts(raw["Metadata"]["time_utc"])
+    ts = _parse_ts(_meta(raw)["time_utc"])
     lat, lon = float(p["Latitude"]), float(p["Longitude"])
     if not (-90 <= lat <= 90 and -180 <= lon <= 180) or (lat == 0 and lon == 0):
         return None
@@ -52,7 +57,7 @@ def _position(raw: dict) -> PositionMsg | None:
 
 def _static(raw: dict) -> StaticMsg:
     s = raw["Message"]["ShipStaticData"]
-    ts = _parse_ts(raw["Metadata"]["time_utc"])
+    ts = _parse_ts(_meta(raw)["time_utc"])
     dim = s.get("Dimension") or {}
     length = (dim.get("A") or 0) + (dim.get("B") or 0)
     beam = (dim.get("C") or 0) + (dim.get("D") or 0)

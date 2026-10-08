@@ -250,3 +250,42 @@ async def test_error_frame_containing_key_is_redacted(caplog):
     recs = await _error_frame_logs(caplog, "bad key fake-test-key rejected")
     assert [r.getMessage() for r in recs] == ["AISstream error frame: bad key [redacted] rejected"]
     assert all("fake-test-key" not in r.getMessage() for r in caplog.records)
+
+
+async def test_subscription_confirmation_is_control_frame_not_drop(caplog):
+    import logging
+    caplog.set_level(logging.INFO, logger="collector")
+
+    async def handler(ws):
+        await ws.recv()
+        await ws.send(json.dumps({"Message": {"CompressionEnabled": True}, "MessageType": "SubscriptionConfirmation"}))
+        await ws.send(json.dumps({"Message": {"CompressionEnabled": True}, "MessageType": "SubscriptionConfirmation"}))
+        await ws.send(json.dumps(POSITION_REPORT))
+        await ws.send("not json")
+        await asyncio.sleep(5)
+
+    async with serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        provider = AISStreamProvider(api_key="fake-test-key", url=f"ws://127.0.0.1:{port}", initial_delay=0.01)
+        await _collect(provider, 1)
+        await asyncio.sleep(0.1)
+    assert provider.dropped <= 1
+    msgs = [r.getMessage() for r in caplog.records]
+    confirmed = [r for r in caplog.records if r.getMessage() == "AISstream subscription confirmed"]
+    assert len(confirmed) == 1 and confirmed[0].levelname == "INFO"
+    assert not any("SubscriptionConfirmation" in m for m in msgs)
+
+
+async def test_subscription_confirmation_alone_leaves_dropped_zero_and_garbage_counts():
+    async def handler(ws):
+        await ws.recv()
+        await ws.send(json.dumps({"Message": {"CompressionEnabled": True}, "MessageType": "SubscriptionConfirmation"}))
+        await ws.send(json.dumps({"MessageType": "Weird"}))
+        await ws.send(json.dumps(POSITION_REPORT))
+        await asyncio.sleep(5)
+
+    async with serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        provider = AISStreamProvider(api_key="fake-test-key", url=f"ws://127.0.0.1:{port}", initial_delay=0.01)
+        await _collect(provider, 1)
+    assert provider.dropped == 1  # only the genuinely unsupported frame

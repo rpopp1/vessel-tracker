@@ -2,7 +2,7 @@ import copy
 
 POSITION_REPORT = {
     "MessageType": "PositionReport",
-    "Metadata": {
+    "MetaData": {
         "MMSI": 636012345, "ShipName": "TEST VLCC  ", "latitude": 29.7, "longitude": -93.9,
         "time_utc": "2026-10-08 12:00:00.123456789 +0000 UTC",
     },
@@ -14,7 +14,7 @@ POSITION_REPORT = {
 
 SHIP_STATIC_TANKER = {
     "MessageType": "ShipStaticData",
-    "Metadata": {"MMSI": 636012345, "ShipName": "TEST VLCC",
+    "MetaData": {"MMSI": 636012345, "ShipName": "TEST VLCC",
                  "time_utc": "2026-10-08 12:00:05.000000000 +0000 UTC"},
     "Message": {"ShipStaticData": {
         "CallSign": "D5XX1  ", "Destination": "HOUSTON      ",

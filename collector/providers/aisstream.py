@@ -72,6 +72,7 @@ class AISStreamProvider:
                     log.info("AISstream connected")
                     self._drop_warned = False
                     first = True
+                    confirmed = False
                     await ws.send(json.dumps(self._subscription()))
                     log.info("AISstream subscription sent")
                     async for raw in ws:
@@ -87,6 +88,11 @@ class AISStreamProvider:
                             continue
                         if isinstance(data, dict) and "error" in data:
                             self._drop("AISstream error frame", data["error"])
+                            continue
+                        if isinstance(data, dict) and data.get("MessageType") == "SubscriptionConfirmation":
+                            if not confirmed:
+                                log.info("AISstream subscription confirmed")
+                                confirmed = True
                             continue
                         msg = parse_message(data) if isinstance(data, dict) else None
                         if msg is None:

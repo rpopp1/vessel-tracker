@@ -67,3 +67,52 @@ def test_empty_name_is_empty_string_not_crash():
                                  {"MessageType": "ShipStaticData", "Message": {}}, {"error": "x"}])
 def test_unknown_or_malformed_returns_none(raw):
     assert parse_message(raw) is None
+
+
+# --- real captured AISstream frames (public AIS data) ---
+import copy
+import json
+from pathlib import Path
+
+_REAL = json.loads((Path(__file__).parent / "fixtures" / "aisstream_real_frames.json").read_text(encoding="utf-8"))
+
+
+def _na(value, na):
+    return None if value == na else value
+
+
+@pytest.mark.parametrize("frame", _REAL["PositionReport"])
+def test_real_position_frames_parse(frame):
+    p = frame["Message"]["PositionReport"]
+    m = parse_message(frame)
+    assert isinstance(m, PositionMsg)
+    assert (m.mmsi, m.lat, m.lon) == (p["UserID"], p["Latitude"], p["Longitude"])
+    assert m.sog == p["Sog"] and m.cog == p["Cog"]
+    assert m.heading == (None if p["TrueHeading"] == 511 else p["TrueHeading"])
+
+
+@pytest.mark.parametrize("frame", _REAL["tanker_static"])
+def test_real_tanker_static_frames_parse(frame):
+    s = frame["Message"]["ShipStaticData"]
+    d = s["Dimension"]
+    m = parse_message(frame)
+    assert isinstance(m, StaticMsg)
+    assert m.mmsi == s["UserID"] and 80 <= m.ship_type_code <= 89
+    assert m.length_m == d["A"] + d["B"] > 0
+    assert m.beam_m == d["C"] + d["D"] > 0
+    assert m.imo == (None if s["ImoNumber"] == 0 else s["ImoNumber"])
+    assert (m.eta is None) == (s["Eta"]["Month"] == 0)
+
+
+def test_real_subscription_confirmation_is_not_data():
+    assert len(_REAL["other"]) == 1 and _REAL["other"][0]["MessageType"] == "SubscriptionConfirmation"
+    assert parse_message(_REAL["other"][0]) is None
+
+
+def test_legacy_metadata_spelling_still_tolerated():
+    legacy = copy.deepcopy(POSITION_REPORT)
+    legacy["Metadata"] = legacy.pop("MetaData")
+    assert isinstance(parse_message(legacy), PositionMsg)
+    legacy_s = copy.deepcopy(SHIP_STATIC_TANKER)
+    legacy_s["Metadata"] = legacy_s.pop("MetaData")
+    assert isinstance(parse_message(legacy_s), StaticMsg)
