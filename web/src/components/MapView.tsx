@@ -1,11 +1,13 @@
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getJSON } from "../api";
 import { DEFAULT_COLOR, SIZE_COLORS } from "../colors";
 import { CLUSTER_ZOOM, filtersToParams, normalizeBbox, type Filters } from "../filters";
 import { pickTextFont, vesselOpacityExpression } from "../mapStyle";
+import { mergeFeatures } from "../liveLogic";
 import type { LiveState, Meta } from "../types";
+import { useLiveSocket } from "../useLiveSocket";
 
 type Props = {
   filters: Filters;
@@ -14,6 +16,7 @@ type Props = {
   track: GeoJSON.Feature | null;
   flyTo: { lon: number; lat: number; nonce: number } | null;
   onLiveState?: (s: LiveState) => void;
+  onLiveError?: (detail: string | null) => void;
 };
 
 const STYLE = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
@@ -31,7 +34,7 @@ function triangle(solid: boolean): ImageData {
   return g.getImageData(0, 0, s, s);
 }
 
-export default function MapView({ filters, meta, onSelect, track, flyTo }: Props) {
+export default function MapView({ filters, meta, onSelect, track, flyTo, onLiveState, onLiveError }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [ready, setReady] = useState(false);
@@ -143,6 +146,19 @@ export default function MapView({ filters, meta, onSelect, track, flyTo }: Props
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flyTo?.nonce, flyTo?.lon, flyTo?.lat]);
 
-  void CLUSTER_ZOOM;
+  const payload = useMemo(() => (view ? { bbox: view.bbox, ...filters } : null), [view, filters]);
+  const { state: live, errorDetail } = useLiveSocket({
+    enabled: ready && !!view && view.zoom >= CLUSTER_ZOOM,
+    payload,
+    onFeatures: (feats) => {
+      const src = mapRef.current?.getSource("vessels") as maplibregl.GeoJSONSource | undefined;
+      if (!src) return;
+      featuresRef.current = mergeFeatures(featuresRef.current, feats);
+      src.setData({ type: "FeatureCollection", features: [...featuresRef.current.values()] });
+    },
+  });
+  useEffect(() => { onLiveState?.(live); }, [live, onLiveState]);
+  useEffect(() => { onLiveError?.(errorDetail); }, [errorDetail, onLiveError]);
+
   return <div ref={el} className="map" />;
 }

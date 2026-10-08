@@ -33,3 +33,6 @@ dd { margin: 0; word-break: break-word; }
 .search li button:hover { background: #1f2937; }
 .search li small { color: #9ca3af; display: block; }
 .search .none { padding: 8px 10px; color: #9ca3af; }
+
+.chip { position: absolute; z-index: 3; bottom: 24px; left: 50%; transform: translateX(-50%); background: rgba(17, 24, 39, 0.92); border: 1px solid #374151; border-radius: 999px; padding: 5px 12px; display: flex; align-items: center; gap: 8px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
