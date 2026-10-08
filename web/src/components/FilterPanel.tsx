@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { getJSON } from "../api";
 import { SIZE_COLORS } from "../colors";
 import { emptyFilters, filtersToParams, NAV_STATUS, toggle, type Filters } from "../filters";
-import { CARGO_LABELS, cargoLabel, hasActiveFilters, sortedNavKeys, topFlags } from "../panelLogic";
+import { CARGO_LABELS, cargoLabel, hasActiveFilters, navKeysWithSelected, topFlags } from "../panelLogic";
 import type { Meta, Stats } from "../types";
 
 type Props = { filters: Filters; onChange: (f: Filters) => void; meta: Meta | null; onStats?: (s: Stats | null) => void };
@@ -29,8 +29,8 @@ export default function FilterPanel({ filters, onChange, meta, onStats }: Props)
   const flags = topFlags(stats?.flag, filters.flag);
 
   const row = (key: string, label: string, count: number, active: boolean, onClick: () => void, color?: string) => (
-    <button key={key} className={`row ${active ? "active" : ""}`} onClick={onClick}>
-      {color && <span className="swatch" style={{ background: color }} />}
+    <button type="button" aria-pressed={active} key={key} className={`row ${active ? "active" : ""}`} onClick={onClick}>
+      {color && <span aria-hidden="true" className="swatch" style={{ background: color }} />}
       <span className="label">{label}</span>
       <span className="count">{count.toLocaleString()}</span>
     </button>
@@ -39,7 +39,7 @@ export default function FilterPanel({ filters, onChange, meta, onStats }: Props)
   return (
     <aside className="panel left">
       <h1>Tankers <small>{stats ? stats.total.toLocaleString() : "-"}</small></h1>
-      {anyActive && <button className="clear" onClick={() => onChange(emptyFilters)}>Clear filters</button>}
+      {anyActive && <button type="button" className="clear" onClick={() => onChange(emptyFilters)}>Clear filters</button>}
 
       <h2>Size class</h2>
       {(meta?.size_classes ?? []).map((c) =>
@@ -62,7 +62,7 @@ export default function FilterPanel({ filters, onChange, meta, onStats }: Props)
         () => onChange({ ...filters, flag: toggle(filters.flag, f) })))}
 
       <h2>Status</h2>
-      {sortedNavKeys(stats?.nav_status).map((k) =>
+      {navKeysWithSelected(stats?.nav_status, filters.nav_status).map((k) =>
         row(k, NAV_STATUS[Number(k)] ?? `Status ${k}`, n(stats?.nav_status, k), filters.nav_status.includes(Number(k)),
           () => onChange({ ...filters, nav_status: toggle(filters.nav_status, Number(k)) })))}
     </aside>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cargoLabel, hasActiveFilters, sortedNavKeys, topFlags } from "./panelLogic";
+import { cargoLabel, hasActiveFilters, navKeysWithSelected, sortedNavKeys, topFlags } from "./panelLogic";
 import { emptyFilters } from "./filters";
 
 describe("topFlags", () => {
@@ -54,5 +54,23 @@ describe("cargoLabel", () => {
   });
   it("falls back for unknown keys", () => {
     expect(cargoLabel("foo_bar")).toBe("Foo bar");
+  });
+});
+
+describe("navKeysWithSelected", () => {
+  it("appends missing selected in numeric order", () => {
+    expect(navKeysWithSelected({ "0": 1, "5": 1 }, [1, 15])).toEqual(["0", "1", "5", "15"]);
+  });
+  it("does not duplicate present", () => {
+    expect(navKeysWithSelected({ "0": 1, "5": 1 }, [5])).toEqual(["0", "5"]);
+  });
+  it("handles undefined stats", () => {
+    expect(navKeysWithSelected(undefined, [5, 1, 5])).toEqual(["1", "5"]);
+  });
+  it("no selection unchanged", () => {
+    expect(navKeysWithSelected({ "15": 1, "1": 1 }, [])).toEqual(["1", "15"]);
+  });
+  it("ignores non-finite", () => {
+    expect(navKeysWithSelected({ "1": 1 }, [NaN, Infinity, -Infinity])).toEqual(["1"]);
   });
 });

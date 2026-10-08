@@ -4,7 +4,7 @@ body { background: #0b1220; color: #e5e7eb; font-family: system-ui, sans-serif; 
 .map { position: absolute; inset: 0; }
 .debug { position: absolute; top: 8px; right: 8px; background: #111827; padding: 6px 10px; border-radius: 6px; }
 
-.panel { position: absolute; z-index: 2; background: rgba(17, 24, 39, 0.92); border: 1px solid #1f2937; border-radius: 8px; padding: 10px; overflow-y: auto; max-height: calc(100% - 16px); }
+.panel { box-sizing: border-box; position: absolute; z-index: 2; background: rgba(17, 24, 39, 0.92); border: 1px solid #1f2937; border-radius: 8px; padding: 10px; overflow-y: auto; max-height: calc(100% - 16px); }
 .panel.left { top: 8px; left: 8px; width: 250px; }
 .panel h1 { font-size: 15px; margin: 0 0 6px; display: flex; justify-content: space-between; }
 .panel h1 small { color: #9ca3af; font-weight: 400; }

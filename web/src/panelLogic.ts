@@ -34,3 +34,9 @@ export function hasActiveFilters(f: Filters): boolean {
 export function sortedNavKeys(navStatus: Record<string, number> | undefined): string[] {
   return Object.keys(navStatus ?? {}).sort((a, b) => Number(a) - Number(b));
 }
+
+export function navKeysWithSelected(navStatus: Record<string, number> | undefined, selected: number[]): string[] {
+  const keys = new Set(sortedNavKeys(navStatus));
+  for (const s of selected) if (Number.isFinite(s)) keys.add(String(s));
+  return [...keys].sort((a, b) => Number(a) - Number(b));
+}
