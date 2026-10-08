@@ -18,7 +18,7 @@ Limits to know before trusting the map:
 ## Prerequisites
 
 - Python 3.11+ (developed on 3.14)
-- Node 20+ (developed on 24)
+- Node 22.12+ (developed on 24). The installed vitest requires Node ^22.12 || ^24 || >=26, so Node 20 and odd-numbered 23/25 will not work for `npm test`.
 - PostgreSQL with PostGIS (developed on PostgreSQL 18 + PostGIS 3.6)
 
 ## One-time setup (Windows)
@@ -29,7 +29,7 @@ Limits to know before trusting the map:
    CREATE EXTENSION IF NOT EXISTS postgis;
    ```
 
-2. Set three environment variables (`setx`, or System Properties > Environment Variables), then restart the terminal (and Claude Code, if you use it):
+2. Set three environment variables with `setx` (same syntax in PowerShell and cmd.exe) or System Properties > Environment Variables, then restart the terminal (and Claude Code, if you use it). `setx` does not affect the window you ran it in, only windows opened afterwards:
 
    - `DATABASE_URL` - connection URL for `vessel_tracker`
    - `TEST_DATABASE_URL` - connection URL for `vessel_tracker_test`
@@ -37,13 +37,27 @@ Limits to know before trusting the map:
 
    URL-encode special characters in the database password. Never commit these values: `.env*` is git-ignored and the code reads only environment variables.
 
-3. Create the virtualenv outside the repo (the repo is in OneDrive), activate it, and install:
+3. Create the virtualenv outside the repo (the repo is in OneDrive), activate it, and install. Run these from the repo root. The shell matters: `%LOCALAPPDATA%` is only expanded by cmd.exe; in PowerShell it would create a literal `%LOCALAPPDATA%` folder in the current directory.
+
+   PowerShell:
+
+   ```
+   python -m venv $env:LOCALAPPDATA\vessel-tracker-venv
+   & "$env:LOCALAPPDATA\vessel-tracker-venv\Scripts\Activate.ps1"
+   pip install -e ".[dev]"
+   ```
+
+   If PowerShell blocks the activate script, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once.
+
+   cmd.exe:
 
    ```
    python -m venv %LOCALAPPDATA%\vessel-tracker-venv
-   %LOCALAPPDATA%\vessel-tracker-venv\Scripts\activate
+   %LOCALAPPDATA%\vessel-tracker-venv\Scripts\activate.bat
    pip install -e ".[dev]"
    ```
+
+   Without activating, call the interpreter directly, e.g. in PowerShell `& "$env:LOCALAPPDATA\vessel-tracker-venv\Scripts\python.exe" -m pytest`.
 
 4. Install the front end:
 
@@ -51,6 +65,8 @@ Limits to know before trusting the map:
    cd web
    npm install
    ```
+
+   (`cd` and `npm` are the same in both shells.)
 
 5. Apply the schema (from the repo root, virtualenv active):
 
@@ -61,7 +77,7 @@ Limits to know before trusting the map:
 
 ## Run
 
-Three terminals, each from the repo root with the virtualenv active (except the third).
+Three terminals (PowerShell or cmd.exe; the commands are identical in both), each from the repo root with the virtualenv activated in it. The third runs Node and needs no virtualenv.
 
 1. Collector:
 
@@ -92,6 +108,16 @@ Three terminals, each from the repo root with the virtualenv active (except the 
 
    Open the URL it prints. The dev server proxies `/api` and `/ws` to `127.0.0.1:8000`. If port 8000 is taken, run uvicorn on another port and change both proxy targets in `web/vite.config.ts`.
 
+### If something is wrong
+
+- `RuntimeError: AISSTREAM_API_KEY environment variable is not set` (or the same for `DATABASE_URL`) at startup: the variable is missing in this terminal. Set it with `setx` and open a NEW terminal.
+- `AISstream error frame: ...`: AISstream rejected the request, typically a bad or rate-limited key. Check the key at aisstream.io. The key is redacted in this line. It is logged on the first error per connection, then at most once a minute.
+- `AISstream connection lost (...); reconnecting` repeating: a network, proxy or firewall is blocking websockets, or the service is down. The collector retries with backoff up to 60 s.
+- `AISstream subscription confirmed` never appears: the connection is not completing or the key is not accepted; look for the two messages above. `AISstream first message received` shows whether any frame arrived at all.
+- Heartbeat `received` stays flat: no feed is reaching the collector.
+- `received` rises but `known_tankers` stays 0 for several minutes: frames arrive but none parse (look for `dropped message (total dropped=...)` warnings, which are rate-limited). Compare a live frame with `tests/fixtures/aisstream_real_frames.json`. This exact failure happened once when AISstream's `MetaData` key was misread.
+- Database connection errors (`database reconnect failed (...); retrying in ... s`): the collector retries with backoff and logs `database reconnected` on success. Check that PostgreSQL is running and `DATABASE_URL` is right.
+
 ## Tests
 
 ```
@@ -107,11 +133,10 @@ The automated tests do NOT cover the map's visual rendering or live websocket be
 
 - The map loads.
 - At low zoom, vessels appear as clusters.
-- At zoom 5 and above, individual markers appear.
+- At zoom 5 and above, individual markers appear, and the status chip shows Live with a recent age. Below zoom 5 the chip reads "Zoom in for live updates".
 - Changing filters changes the counts.
 - Clicking a vessel opens the detail panel.
 - The track buttons show a track.
-- The status chip shows Live and a recent age.
 
 ## Tuning classification
 
@@ -120,11 +145,11 @@ Edit `config/classification.yaml`. The values are starting points, not calibrate
 - `size_classes`: listed largest first. A vessel gets the first class whose `min_length_m` is at or below its reported length. Each class carries a `cargo_group` (crude, mostly_crude, crude_or_products, mostly_products, products, products_coastal) and a `laden_draught_m`. A vessel with no length is Unclassified / unknown.
 - `laden_ratio`: laden if draught >= `laden_ratio` x the class `laden_draught_m`.
 - `observed_range_min_m`: once a vessel's own observed min/max draught spans at least this much, laden means draught at or above the midpoint of that range instead of the class reference.
-- `fade_hours`: the UI fades markers older than this.
-- `stale_hours`: vessels older than this are hidden from the live map.
+- `fade_hours`: the UI fades markers older than this. Restart the API after changing it (it reads the config).
+- `stale_hours`: vessels older than this are hidden from the live map. Restart the API after changing it.
 - `retention_months`: used by pruning.
 
-Classification is computed from each vessel's static message, so after you edit the file and restart the collector, a vessel is re-classified the next time it sends a static message.
+Size class and laden changes apply per vessel: restart the collector, and each vessel is re-classified the next time it sends a static message (vessels that stay quiet keep their old class).
 
 ## Data retention
 
@@ -143,10 +168,10 @@ The repo sits in OneDrive. Keep the virtualenv outside it (as above). `web/node_
 
 ## Hosting later
 
-- Run the same two Python processes (collector and uvicorn) with the same three environment variables set on the host.
+- Run the same two Python processes (collector and uvicorn) with environment variables set on the host: `DATABASE_URL` for both processes, `AISSTREAM_API_KEY` for the collector only. `TEST_DATABASE_URL` is only needed on dev machines.
 - Build the UI with `npm run build`, serve `web/dist` as static files, and reverse-proxy `/api` and `/ws` to uvicorn, including the websocket upgrade for `/ws`.
 - Add authentication in front before exposing it publicly; v1 has none.
-- To change data feed, write a class implementing `collector.providers.base.AISProvider` (an async `messages()` yielding normalized messages) and use it in `collector/main.py` in place of `AISStreamProvider`. Paid options include Spire, MarineTraffic API, and S&P Global for cargo intelligence.
+- To change data feed, write a class implementing `collector.providers.base.AISProvider` (an async `messages()` yielding normalized messages) and use it in `collector/main.py` in place of `AISStreamProvider`. The collector heartbeat also reads `provider.received`, `provider.last_received` (a `time.monotonic()` value or `None`) and `provider.dropped`, so a replacement must expose those attributes. Paid options include Spire, MarineTraffic API, and S&P Global for cargo intelligence.
 
 ## Data source and privacy
 
